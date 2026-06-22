@@ -15,3 +15,6 @@ init:
       std: 0.02
     bias:
       method: "zeros"
+  embedding:
+    method: "normal"
+    std: 0.02

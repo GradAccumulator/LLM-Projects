@@ -7,6 +7,6 @@ def init_tensor(*shape, init_cfg:DictConfig):
         case "zeros":
             return torch.zeros(*shape)
         case "normal":
-            return torch.randn(*shape)*init_cfg.std
+            return torch.normal(0, init_cfg.std)
         case _:
             return torch.randn(*shape)
