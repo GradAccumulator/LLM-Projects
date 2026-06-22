@@ -15,14 +15,14 @@ class Linear(nn.Module):
         self._in_features   = in_features
         self._out_features  = out_features
         self._use_bias      = use_bias
-        self._cfg = cfg
+        self._init_cfg:DictConfig = cfg.init.linear
         
         self._weight = nn.Parameter(
-            nn_utils.init_tensor(self.in_features, self.out_features, self.cfg.init.linear.weight)
+            nn_utils.init_tensor(self.in_features, self.out_features, self.init_cfg.weight)
         )
         if self.use_bias:
             self._bias = nn.Parameter(
-                nn_utils.init_tensor(self.out_features, self.cfg.init.linear.bias)
+                nn_utils.init_tensor(self.out_features, self.init_cfg.bias)
             )
     
     def forward(self, x:Tensor) -> Tensor:
@@ -38,7 +38,7 @@ class Linear(nn.Module):
     @property
     def use_bias(self): return self._use_bias
     @property
-    def cfg(self): return self._cfg
+    def init_cfg(self): return self._init_cfg
     @property
     def weight(self): return self._weight
     @property
