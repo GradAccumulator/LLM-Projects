@@ -4,30 +4,25 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class Embedding(nn.Module):
-    def __init__(self, num_embeddings:int, embedding_dim:int, cfg:DictConfig):
+    def __init__(self, num_embeddings:int, embedding_dim:int, init_cfg:DictConfig):
         super().__init__()
-        dev_utils(
+        dev_utils.type_check(
             ('num_embeddings', num_embeddings, int),
             ('embedding_dim' , embedding_dim , int),
-            ('cfg'           , cfg           , DictConfig)
+            ('init_cfg'      , init_cfg      , DictConfig)
+            ,func_name="Embedding.__init__()"
         )
         
-        self._num_embeddings = num_embeddings
-        self._embedding_dim = embedding_dim
-        self._init_cfg = cfg.init.embedding
-        
         self._weight = nn.Parameter(
-            nn_utils.init_tensor(self.num_embeddings, self.embedding_dim, init_cfg=self.init_cfg)
+            nn_utils.init_tensor(num_embeddings, embedding_dim, init_cfg=init_cfg)
         )
     
     def forward(self, x:Tensor) -> Tensor:
         return self.weight[x.long()]
     
     @property
-    def num_embeddings(self): return self._num_embeddings
+    def num_embeddings(self): return self.weight.size(0)
     @property
-    def embedding_dim(self): return self._embedding_dim
-    @property
-    def init_cfg(self): return self._init_cfg
+    def embedding_dim(self): return self.weight.size(1)
     @property
     def weight(self): return self._weight

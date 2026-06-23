@@ -8,12 +8,14 @@ class Softmax(nn.Module):
         dev_utils.type_check(
             ("dim", dim, int),
             ("temperature", temperature, float|int)
+            ,func_name="Softmax.__init__()"
         )
-        self._dim = dim
+        if temperature<=0:
+            raise ValueError("<Softmax.__init__()> Softmax의 temperature은 양수여야 합니다.")
+        
+        self._dim         = dim
         self._temperature = temperature
         
-        if self.temperature<=0:
-            raise ValueError("Softmax의 temperature은 양수여야 합니다.")
     
     def forward(self, x:Tensor) -> Tensor:
         x = x / self.temperature

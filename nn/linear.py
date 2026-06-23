@@ -4,25 +4,25 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class Linear(nn.Module):
-    def __init__(self, in_features:int, out_features:int,*, cfg:DictConfig, use_bias:bool=True):
+    def __init__(self, in_features:int, out_features:int,*, init_cfg:DictConfig, use_bias:bool=True):
         super().__init__()
         dev_utils.type_check(
             ("in_features"  , in_features   , int),
             ("out_features" , out_features  , int),
-            ("cfg"          , cfg           , DictConfig),
-            ("use_bias"     , use_bias      , bool),
+            ("init_cfg"     , init_cfg      , DictConfig),
+            ("use_bias"     , use_bias      , bool)
+            ,func_name="Linear.__init__()"
         )
-        self._in_features   = in_features
-        self._out_features  = out_features
-        self._use_bias      = use_bias
-        self._init_cfg:DictConfig = cfg.init.linear
+        
+        self._use_bias:bool
+        self.register_buffer('_use_bias', use_bias)
         
         self._weight = nn.Parameter(
-            nn_utils.init_tensor(self.in_features, self.out_features, self.init_cfg.weight)
+            nn_utils.init_tensor(in_features, out_features, init_cfg.weight)
         )
         if self.use_bias:
             self._bias = nn.Parameter(
-                nn_utils.init_tensor(self.out_features, self.init_cfg.bias)
+                nn_utils.init_tensor(out_features, init_cfg.bias)
             )
     
     def forward(self, x:Tensor) -> Tensor:
@@ -32,13 +32,11 @@ class Linear(nn.Module):
         return out
     
     @property
-    def in_features(self): return self._in_features
+    def in_features(self): return self.weight.size(0)
     @property
-    def out_features(self): return self._out_features
+    def out_features(self): return self.weight.size(1)
     @property
     def use_bias(self): return self._use_bias
-    @property
-    def init_cfg(self): return self._init_cfg
     @property
     def weight(self): return self._weight
     @property

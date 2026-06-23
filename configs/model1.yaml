@@ -7,6 +7,10 @@ model:
   d_ffn: 0
   dropout: 0.0
   bias: false
+  attention:
+    positional_embedding: "RoPE" #//"learnable_positional_embedding"
+    RoPE:
+      base: 10000
 
 init:
   linear:
