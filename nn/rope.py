@@ -12,27 +12,29 @@ class RoPE(nn.Module):
         )
         
         self.cfg = RoPE_cfg
-        self.cached:tuple[Tensor, Tensor]
-        '''(sin, cos)'''
+        self.cached_sin:Tensor
+        self.cached_cos:Tensor
     
     def compute_sin_cos(self, T:int, D:int, device:torch.device, dtype:torch.dtype) -> tuple[Tensor, Tensor]:
-        if not hasattr(self, 'cached') \
-            or tuple(self.cached[0].shape) != (T,D):
-            
-            angles = torch.arange(T, device=device,dtype=dtype)[:, None] \
+        need_new_cache = (
+            not hasattr(self, "cached_sin")
+            or tuple(self.cached_sin.shape) != (T, D // 2)
+            or self.cached_sin.device != device
+            or self.cached_sin.dtype != dtype
+        )
+        if need_new_cache:
+            angles = torch.arange(T, device=device,dtype=torch.float32)[:, None] \
                 * self.base**(
-                    -2 * torch.arange(D//2, device=device,dtype=dtype) / D
+                    -2 * torch.arange(D//2, device=device,dtype=torch.float32) / D
                 )[None, :]
             
-            sin = angles.sin()
-            cos = angles.cos()
-            self.register_buffer(
-                "cached",
-                (sin,cos),
-                persistent=False
-            )
+            sin = angles.sin().to(dtype)
+            cos = angles.cos().to(dtype)
+            
+            self.register_buffer("cached_sin", sin, persistent=False)
+            self.register_buffer("cached_cos", cos, persistent=False)
         else:
-            sin,cos = self.cached
+            sin,cos = self.cached_sin, self.cached_cos
         
         return sin,cos
     
@@ -67,9 +69,13 @@ class RoPE(nn.Module):
     @property
     def base(self)->int|float: return self.cfg.base
     @base.setter
-    def base(self, x:int):
+    def base(self, x:int|float):
         dev_utils.type_check(
-            ("x", x, int)
+            ("x", x, int|float)
             ,func_name="RoPE.base.setter"
         )
-        self.cfg
+        self.cfg.base = x
+        
+        if hasattr(self, "cached_sin"):
+            self.__delattr__("cached_sin")
+            self.__delattr__("cached_cos")

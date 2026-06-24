@@ -22,3 +22,8 @@ init:
   embedding:
     method: "normal"
     std: 0.02
+  layer_norm:
+    weight:
+      method: "ones"
+    bias:
+      method: "zeros"

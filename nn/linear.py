@@ -14,11 +14,10 @@ class Linear(nn.Module):
             ,func_name="Linear.__init__()"
         )
         
-        self._use_bias:bool
-        self.register_buffer('_use_bias', use_bias)
+        self._use_bias = use_bias
         
         self._weight = nn.Parameter(
-            nn_utils.init_tensor(in_features, out_features, init_cfg.weight)
+            nn_utils.init_tensor(out_features, in_features, init_cfg.weight)
         )
         if self.use_bias:
             self._bias = nn.Parameter(
@@ -28,17 +27,17 @@ class Linear(nn.Module):
     def forward(self, x:Tensor) -> Tensor:
         out = x@self.weight.T
         if self.use_bias:
-            out += self.bias
+            out = out + self.bias
         return out
     
     @property
-    def in_features(self): return self.weight.size(0)
+    def in_features(self): return self.weight.size(1)
     @property
-    def out_features(self): return self.weight.size(1)
+    def out_features(self): return self.weight.size(0)
     @property
     def use_bias(self): return self._use_bias
     @property
     def weight(self): return self._weight
     @property
-    def bias(self): return self._bias
+    def bias(self): return self._bias if self.use_bias else None
     

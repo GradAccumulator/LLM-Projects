@@ -12,6 +12,10 @@ class Embedding(nn.Module):
             ('init_cfg'      , init_cfg      , DictConfig)
             ,func_name="Embedding.__init__()"
         )
+        if num_embeddings <= 0:
+            raise ValueError("<Embedding.__init__()> num_embeddings는 양의 정수여야 합니다.")
+        if embedding_dim <= 0:
+            raise ValueError("<Embedding.__init__()> embedding_dim은 양의 정수여야 합니다.")
         
         self._weight = nn.Parameter(
             nn_utils.init_tensor(num_embeddings, embedding_dim, init_cfg=init_cfg)
