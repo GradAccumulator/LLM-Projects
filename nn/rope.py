@@ -4,10 +4,10 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class RoPE(nn.Module):
-    def __init__(self, RoPE_cfg:DictConfig):
+    def __init__(self, RoPE_cfg:DictConfig|dict):
         super().__init__()
         dev_utils.type_check(
-            ("RoPE_cfg", RoPE_cfg, DictConfig)
+            ("RoPE_cfg", RoPE_cfg, DictConfig|dict)
             ,func_name="RoPE.__init__()"
         )
         
@@ -67,14 +67,14 @@ class RoPE(nn.Module):
     
     
     @property
-    def base(self)->int|float: return self.cfg.base
+    def base(self)->int|float: return self.cfg['base']
     @base.setter
     def base(self, x:int|float):
         dev_utils.type_check(
             ("x", x, int|float)
-            ,func_name="RoPE.base.setter"
+            ,func_name="RoPE.base.setter()"
         )
-        self.cfg.base = x
+        self.cfg['base'] = x
         
         if hasattr(self, "cached_sin"):
             self.__delattr__("cached_sin")

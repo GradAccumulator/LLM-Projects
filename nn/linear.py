@@ -4,12 +4,12 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class Linear(nn.Module):
-    def __init__(self, in_features:int, out_features:int,*, init_cfg:DictConfig, use_bias:bool=True):
+    def __init__(self, in_features:int, out_features:int,*, init_cfg:DictConfig|dict, use_bias:bool=True):
         super().__init__()
         dev_utils.type_check(
             ("in_features"  , in_features   , int),
             ("out_features" , out_features  , int),
-            ("init_cfg"     , init_cfg      , DictConfig),
+            ("init_cfg"     , init_cfg      , DictConfig|dict),
             ("use_bias"     , use_bias      , bool)
             ,func_name="Linear.__init__()"
         )
@@ -17,11 +17,11 @@ class Linear(nn.Module):
         self._use_bias = use_bias
         
         self._weight = nn.Parameter(
-            nn_utils.init_tensor(out_features, in_features, init_cfg.weight)
+            nn_utils.init_tensor(out_features, in_features, init_cfg['weight'])
         )
         if self.use_bias:
             self._bias = nn.Parameter(
-                nn_utils.init_tensor(out_features, init_cfg.bias)
+                nn_utils.init_tensor(out_features, init_cfg['bias'])
             )
     
     def forward(self, x:Tensor) -> Tensor:

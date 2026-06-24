@@ -4,12 +4,12 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class Embedding(nn.Module):
-    def __init__(self, num_embeddings:int, embedding_dim:int, init_cfg:DictConfig):
+    def __init__(self, num_embeddings:int, embedding_dim:int, init_cfg:DictConfig|dict):
         super().__init__()
         dev_utils.type_check(
             ('num_embeddings', num_embeddings, int),
             ('embedding_dim' , embedding_dim , int),
-            ('init_cfg'      , init_cfg      , DictConfig)
+            ('init_cfg'      , init_cfg      , DictConfig|dict)
             ,func_name="Embedding.__init__()"
         )
         if num_embeddings <= 0:

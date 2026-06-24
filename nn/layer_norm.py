@@ -4,10 +4,10 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class LayerNorm(nn.Module):
-    def __init__(self, *normalized_shape:int, init_cfg:DictConfig, eps:float=1e-5):
+    def __init__(self, *normalized_shape:int, init_cfg:DictConfig|dict, eps:float=1e-5):
         super().__init__()
         dev_utils.type_check(
-            ("init_cfg"     , init_cfg      , DictConfig),
+            ("init_cfg"     , init_cfg      , DictConfig|dict),
             ("eps"          , eps           , float)
             ,func_name="LayerNorm.__init__()"
         )
@@ -29,10 +29,10 @@ class LayerNorm(nn.Module):
         self._normalized_dims = tuple(range(-len(normalized_shape), 0))
         
         self._alpha = nn.Parameter(
-            nn_utils.init_tensor(*normalized_shape, init_cfg.alpha)
+            nn_utils.init_tensor(*normalized_shape, init_cfg['alpha'])
         )
         self._beta = nn.Parameter(
-            nn_utils.init_tensor(*normalized_shape, init_cfg.beta)
+            nn_utils.init_tensor(*normalized_shape, init_cfg['beta'])
         )
     
     def forward(self, x:Tensor)->Tensor:
