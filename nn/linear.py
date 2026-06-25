@@ -5,6 +5,17 @@ from ..utils import nn_utils, dev_utils
 
 class Linear(nn.Module):
     def __init__(self, in_features:int, out_features:int,*, init_cfg:DictConfig|dict=None, use_bias:bool=True):
+        '''```
+        init_cfg = {
+            "weight": {
+                "method":...
+            },
+            "bias": {
+                "method":...
+            }
+        }
+        ```'''
+        
         super().__init__()
         dev_utils.type_check(
             ("in_features"  , in_features   , int),
@@ -27,12 +38,22 @@ class Linear(nn.Module):
                 }
             }
         
+        init_cfg = dev_utils.make_dictconfig(init_cfg, default={
+            "weight": {
+                "method":"normal",
+                "std":0.02
+            },
+            "bias": {
+                "method":"zeros"
+            }
+        })
+        
         self._weight = nn.Parameter(
-            nn_utils.init_tensor(out_features, in_features, init_cfg['weight'])
+            nn_utils.init_tensor(out_features, in_features, init_cfg.weight)
         )
         if self.use_bias:
             self._bias = nn.Parameter(
-                nn_utils.init_tensor(out_features, init_cfg['bias'])
+                nn_utils.init_tensor(out_features, init_cfg.bias)
             )
     
     def forward(self, x:Tensor) -> Tensor:

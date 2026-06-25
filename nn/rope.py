@@ -4,8 +4,10 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class RoPE(nn.Module):
-    def __init__(self, base:int|float):
+    def __init__(self, base:int|float=None):
         super().__init__()
+        if base is None:
+            base = 10000
         dev_utils.type_check(
             ("base", base, int|float)
             ,func_name="RoPE.__init__()"

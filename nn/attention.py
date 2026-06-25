@@ -1,6 +1,6 @@
 import torch, torch.nn as nn, math
 from torch import Tensor
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from ..utils import nn_utils, dev_utils
 from .linear import Linear
 from .rope import RoPE
@@ -13,11 +13,32 @@ class MultiheadAttention(nn.Module):
         embed_dim   :int, 
         num_heads   :int, 
         dropout     :float|int, 
-        init_cfg    :DictConfig|dict,
+        init_cfg    :DictConfig|dict=None,
         bias        :bool       =True,
         use_RoPE    :bool       =True,
-        RoPE_base   :int|float  =10000
+        RoPE_base   :int|float  =None
     ):
+        '''```
+        init_cfg = {
+            "qkv_linear": {
+                "weight": {
+                    "method":...
+                },
+                "bias": {
+                    "method":...
+                }
+            },
+            "output_linear": {
+                "weight": {
+                    "method":...
+                },
+                "bias": {
+                    "method":...
+                }
+            }
+        }
+        ```'''
+        
         super().__init__()
         dev_utils.type_check(
             ("embed_dim"    , embed_dim     , int),
@@ -26,7 +47,7 @@ class MultiheadAttention(nn.Module):
             ("dropout"      , dropout       , float|int),
             ('bias'         , bias          , bool),
             ('use_RoPE'     , use_RoPE      , bool),
-            ('RoPE_base'    , RoPE_base     , int|float)
+            ('RoPE_base'    , RoPE_base     , int|float|None)
             ,func_name="MultiheadAttention.__init__()"
         )
         if embed_dim%num_heads != 0:
@@ -36,9 +57,15 @@ class MultiheadAttention(nn.Module):
         
         self._num_heads = num_heads
         self._d_head = embed_dim//num_heads
+
+        init_cfg = dev_utils.make_dictconfig(init_cfg,default={
+                "qkv_linear": None,
+                "output_linear": None
+            }
+        )
         
-        self.qkv_linear = Linear(embed_dim, embed_dim*3, init_cfg=init_cfg['qkv_linear'], use_bias=bias)
-        self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg['output_linear'], use_bias=bias)
+        self.qkv_linear = Linear(embed_dim, embed_dim*3, init_cfg=init_cfg.qkv_linear, use_bias=bias)
+        self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.output_linear, use_bias=bias)
         self.softmax = Softmax(dim=-1)
         self.dropout = Dropout(dropout)
         self.cached_mask:Tensor

@@ -5,6 +5,12 @@ from ..utils import nn_utils, dev_utils
 
 class Embedding(nn.Module):
     def __init__(self, num_embeddings:int, embedding_dim:int, init_cfg:DictConfig|dict=None):
+        '''```
+        init_cfg = {
+            "method":...
+        }
+        ```'''
+        
         super().__init__()
         dev_utils.type_check(
             ('num_embeddings', num_embeddings, int),
@@ -17,11 +23,10 @@ class Embedding(nn.Module):
         if embedding_dim <= 0:
             raise ValueError("<Embedding.__init__()> embedding_dim은 양의 정수여야 합니다.")
         
-        if init_cfg is None:
-            init_cfg = {
-                "method":"normal",
-                "std":0.02
-            }
+        init_cfg = dev_utils.make_dictconfig(init_cfg, default={
+            "method":"normal",
+            "std":0.02
+        })
         
         self._weight = nn.Parameter(
             nn_utils.init_tensor(num_embeddings, embedding_dim, init_cfg=init_cfg)
