@@ -4,14 +4,15 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class RoPE(nn.Module):
-    def __init__(self, RoPE_cfg:DictConfig|dict):
+    def __init__(self, base:int|float):
         super().__init__()
         dev_utils.type_check(
-            ("RoPE_cfg", RoPE_cfg, DictConfig|dict)
+            ("base", base, int|float)
             ,func_name="RoPE.__init__()"
         )
         
-        self.cfg = RoPE_cfg
+        self._base = base
+        
         self.cached_sin:Tensor
         self.cached_cos:Tensor
     
@@ -19,8 +20,6 @@ class RoPE(nn.Module):
         need_new_cache = (
             not hasattr(self, "cached_sin")
             or tuple(self.cached_sin.shape) != (T, D // 2)
-            or self.cached_sin.device != device
-            or self.cached_sin.dtype != dtype
         )
         if need_new_cache:
             angles = torch.arange(T, device=device,dtype=torch.float32)[:, None] \
@@ -50,7 +49,7 @@ class RoPE(nn.Module):
         
         return out
     
-    def forward(self, Q:Tensor, K:Tensor)->Tensor:
+    def forward(self, Q:Tensor, K:Tensor)->tuple[Tensor, Tensor]:
         #Q, K.shape == (B, H, T, D)
         T = Q.size(2)
         D = Q.size(3)
@@ -67,14 +66,14 @@ class RoPE(nn.Module):
     
     
     @property
-    def base(self)->int|float: return self.cfg['base']
+    def base(self)->int|float: return self._base
     @base.setter
     def base(self, x:int|float):
         dev_utils.type_check(
             ("x", x, int|float)
             ,func_name="RoPE.base.setter()"
         )
-        self.cfg['base'] = x
+        self._base = x
         
         if hasattr(self, "cached_sin"):
             self.__delattr__("cached_sin")

@@ -4,18 +4,24 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class Embedding(nn.Module):
-    def __init__(self, num_embeddings:int, embedding_dim:int, init_cfg:DictConfig|dict):
+    def __init__(self, num_embeddings:int, embedding_dim:int, init_cfg:DictConfig|dict=None):
         super().__init__()
         dev_utils.type_check(
             ('num_embeddings', num_embeddings, int),
             ('embedding_dim' , embedding_dim , int),
-            ('init_cfg'      , init_cfg      , DictConfig|dict)
+            ('init_cfg'      , init_cfg      , DictConfig|dict|None)
             ,func_name="Embedding.__init__()"
         )
         if num_embeddings <= 0:
             raise ValueError("<Embedding.__init__()> num_embeddings는 양의 정수여야 합니다.")
         if embedding_dim <= 0:
             raise ValueError("<Embedding.__init__()> embedding_dim은 양의 정수여야 합니다.")
+        
+        if init_cfg is None:
+            init_cfg = {
+                "method":"normal",
+                "std":0.02
+            }
         
         self._weight = nn.Parameter(
             nn_utils.init_tensor(num_embeddings, embedding_dim, init_cfg=init_cfg)

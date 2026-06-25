@@ -9,6 +9,7 @@ model:
   bias: false
   attention:
     positional_embedding: "RoPE" #"learnable_positional_embedding"
+    dropout: 0.0
     RoPE:
       base: 10000
 
@@ -23,7 +24,20 @@ init:
     method: "normal"
     std: 0.02
   layer_norm:
-    weight:
+    alpha:
       method: "ones"
-    bias:
+    beta:
       method: "zeros"
+  attention:
+    qkv_linear:
+      weight:
+        method: "normal"
+        std: 0.02
+      bias:
+        method: "zeros"
+    out_linear:
+      weight:
+        method: "normal"
+        std: 0.02
+      bias:
+        method: "zeros"
