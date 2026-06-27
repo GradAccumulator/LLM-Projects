@@ -1,7 +1,6 @@
 import torch, torch.nn as nn
 from torch import Tensor
-from omegaconf import DictConfig
-from ..utils import nn_utils, dev_utils
+from ..utils import dev_utils
 
 class RoPE(nn.Module):
     def __init__(self, base:int|float=None):
@@ -12,6 +11,8 @@ class RoPE(nn.Module):
             ("base", base, int|float)
             ,func_name="RoPE.__init__()"
         )
+        if base <= 0:
+            raise ValueError("<RoPE.__init__()> RoPE의 base는 양수여야 합니다.")
         
         self._base = base
         
@@ -22,6 +23,8 @@ class RoPE(nn.Module):
         need_new_cache = (
             not hasattr(self, "cached_sin")
             or tuple(self.cached_sin.shape) != (T, D // 2)
+            or self.cached_sin.device != device
+            or self.cached_sin.dtype != dtype
         )
         if need_new_cache:
             angles = torch.arange(T, device=device,dtype=torch.float32)[:, None] \

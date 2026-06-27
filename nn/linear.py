@@ -24,19 +24,12 @@ class Linear(nn.Module):
             ("use_bias"     , use_bias      , bool)
             ,func_name="Linear.__init__()"
         )
+        if in_features <= 0:
+            raise ValueError("<Linear.__init__()> in_features는 양의 정수여야 합니다.")
+        if out_features <= 0:
+            raise ValueError("<Linear.__init__()> out_features는 양의 정수여야 합니다.")
         
         self._use_bias = use_bias
-        
-        if init_cfg is None:
-            init_cfg = {
-                "weight": {
-                    "method":"normal",
-                    "std":0.02
-                },
-                "bias": {
-                    "method":"zeros"
-                }
-            }
         
         init_cfg = dev_utils.make_dictconfig(init_cfg, default={
             "weight": {
@@ -49,11 +42,11 @@ class Linear(nn.Module):
         })
         
         self._weight = nn.Parameter(
-            nn_utils.init_tensor(out_features, in_features, init_cfg.weight)
+            nn_utils.init_tensor(out_features, in_features, init_cfg=init_cfg.weight)
         )
         if self.use_bias:
             self._bias = nn.Parameter(
-                nn_utils.init_tensor(out_features, init_cfg.bias)
+                nn_utils.init_tensor(out_features, init_cfg=init_cfg.bias)
             )
     
     def forward(self, x:Tensor) -> Tensor:

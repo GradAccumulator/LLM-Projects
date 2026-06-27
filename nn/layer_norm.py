@@ -4,7 +4,12 @@ from omegaconf import DictConfig
 from ..utils import nn_utils, dev_utils
 
 class LayerNorm(nn.Module):
-    def __init__(self, *normalized_shape:int, init_cfg:DictConfig|dict=None, eps:float=1e-5):
+    def __init__(
+        self, 
+        *normalized_shape:int, 
+        init_cfg:DictConfig|dict=None, 
+        eps:float=1e-5
+    ):
         '''```
         init_cfg = { 
             "alpha": { 
@@ -35,6 +40,8 @@ class LayerNorm(nn.Module):
                 )
         if len(normalized_shape) == 0:
             raise ValueError("<LayerNorm.__init__()> normalized_shape는 최소 1개 이상이어야 합니다.")
+        if eps<=0:
+            raise ValueError("<LayerNorm.__init__()> eps는 반드시 양수여야 합니다.")
         
         self._eps = eps
         self._normalized_dims = tuple(range(-len(normalized_shape), 0))
@@ -49,10 +56,10 @@ class LayerNorm(nn.Module):
         })
         
         self._alpha = nn.Parameter(
-            nn_utils.init_tensor(*normalized_shape, init_cfg.alpha)
+            nn_utils.init_tensor(*normalized_shape, init_cfg=init_cfg.alpha)
         )
         self._beta = nn.Parameter(
-            nn_utils.init_tensor(*normalized_shape, init_cfg.beta)
+            nn_utils.init_tensor(*normalized_shape, init_cfg=init_cfg.beta)
         )
     
     def forward(self, x:Tensor)->Tensor:

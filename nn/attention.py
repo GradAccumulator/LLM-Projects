@@ -1,13 +1,13 @@
 import torch, torch.nn as nn, math
 from torch import Tensor
-from omegaconf import DictConfig, OmegaConf
-from ..utils import nn_utils, dev_utils
+from omegaconf import DictConfig
+from ..utils import dev_utils
 from .linear import Linear
 from .rope import RoPE
 from .softmax import Softmax
 from .dropout import Dropout
 
-class MultiheadAttention(nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(
         self, 
         embed_dim   :int, 
@@ -43,17 +43,17 @@ class MultiheadAttention(nn.Module):
         dev_utils.type_check(
             ("embed_dim"    , embed_dim     , int),
             ("num_heads"    , num_heads     , int),
-            ("init_cfg"     , init_cfg      , DictConfig|dict),
+            ("init_cfg"     , init_cfg      , DictConfig|dict|None),
             ("dropout"      , dropout       , float|int),
             ('bias'         , bias          , bool),
             ('use_RoPE'     , use_RoPE      , bool),
             ('RoPE_base'    , RoPE_base     , int|float|None)
-            ,func_name="MultiheadAttention.__init__()"
+            ,func_name="MultiHeadAttention.__init__()"
         )
         if embed_dim%num_heads != 0:
-            raise ValueError("<MultiheadAttention.__init__()> embed_dim은 num_heads와 나누어 떨어져야 합니다.")
+            raise ValueError("<MultiHeadAttention.__init__()> embed_dim은 num_heads와 나누어 떨어져야 합니다.")
         if not 0<=dropout<1:
-            raise ValueError("<MultiheadAttention.__init__()> dropout p는 반드시 [0, 1) 범위의 실수여야 합니다.")
+            raise ValueError("<MultiHeadAttention.__init__()> dropout p는 반드시 [0, 1) 범위의 실수여야 합니다.")
         
         self._num_heads = num_heads
         self._d_head = embed_dim//num_heads
