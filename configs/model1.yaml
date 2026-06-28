@@ -8,36 +8,51 @@ model:
   dropout: 0.0
   bias: false
   attention:
-    positional_embedding: "RoPE" #"learnable_positional_embedding"
+    positional_embedding: "rope" #"learnable"
     dropout: 0.0
     RoPE:
       base: 10000
 
 init:
-  linear:
-    weight:
-      method: "normal"
-      std: 0.02
-    bias:
-      method: "zeros"
   embedding:
     method: "normal"
     std: 0.02
-  layer_norm:
-    alpha:
-      method: "ones"
-    beta:
-      method: "zeros"
-  attention:
-    qkv_linear:
-      weight:
-        method: "normal"
-        std: 0.02
-      bias:
+
+    
+  transformer_block:
+    layer_norm:
+      alpha:
+        method: "ones"
+      beta:
         method: "zeros"
-    out_linear:
-      weight:
-        method: "normal"
-        std: 0.02
-      bias:
-        method: "zeros"
+    
+
+    attention:
+      qkv_linear:
+        weight:
+          method: "normal"
+          std: 0.02
+        bias:
+          method: "zeros"
+
+      out_linear:
+        weight:
+          method: "normal"
+          std: 0.02
+        bias:
+          method: "zeros"
+        
+      ffn:
+        linear1:
+          weight:
+            method: "normal"
+            std: 0.02
+          bias:
+            method: "zeros"
+          
+        linear2:
+          weight:
+            method: "normal"
+            std: 0.02
+          bias:
+            method: "zeros"
