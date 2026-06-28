@@ -105,6 +105,7 @@ class MultiHeadAttention(nn.Module):
         )
     
     def _apply_mask(self, scores:Tensor, T:int, device:torch.device, mask:Tensor=None)->Tensor:
+        #scores.shape == (B,H,T,T)
         need_new_mask = (mask is None) and not ( hasattr(self, 'cached_mask') and self.cached_mask.shape == (T,T))
         if need_new_mask:
             self.register_buffer(
@@ -121,11 +122,15 @@ class MultiHeadAttention(nn.Module):
         weights = self.softmax(scores)
         drop = self.dropout(weights)
         out = drop@V
+        #out.shape == (B, H, T, D)
         out = out.transpose(1, 2).reshape(B,T,self.embed_dim)
+        #out.shape == (B, T, D)
         
         return out
     
     def forward_debug(self, x:Tensor, mask:Tensor, T:int) -> Tensor:
+        #x.shape == (B, T, D)
+        #mask.shape == (T, T)
         if mask is not None and mask.shape != (T,T):
             raise ValueError(
                 f"mask의 shape이 입력 텐서에 맞지 않습니다."
@@ -148,12 +153,14 @@ class MultiHeadAttention(nn.Module):
         cached_sin:Tensor=None, 
         cached_cos:Tensor=None
     ) -> Tensor:
+        #x.shape == (B, T, D)
         device = x.device
         T = x.size(1)
         if runtime.DEBUG_CHECKS:
             self.forward_debug(x, mask, T)
         
         B, Q,K,V = self._qkv_projection(x)
+        #Q,K,V shape == (B, H, T, D)
 
         if self.use_RoPE:
             Q,K = self.RoPE(
@@ -163,11 +170,14 @@ class MultiHeadAttention(nn.Module):
             )
         
         scores = Q@K.transpose(-1, -2)/math.sqrt(self.d_head)
+        #scores.shape == (B,H,T,T)
         
         scores = self._apply_mask(scores, T, device, mask=mask)
         
         out = self._attention(scores, V, B, T)
+        #out.shape == (B, T, D)
         out = self.out_linear(out)
+        #out.shape == (B, T, D)
         
         return out
     

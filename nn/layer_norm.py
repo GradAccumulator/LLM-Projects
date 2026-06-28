@@ -68,6 +68,7 @@ class LayerNorm(nn.Module):
         )
     
     def forward_debug(self, x:Tensor):
+        #x.shape == (B, T, D), self.normalized_shape == (D,)
         if self.normalized_shape != x.shape[-len(self.normalized_shape):]:
             raise ValueError(
                 f"<LayerNorm.forward()> 입력 텐서의 shape는 {tuple(self.normalized_shape)}로 끝나야 합니다. "
@@ -75,6 +76,7 @@ class LayerNorm(nn.Module):
             )
     
     def forward(self, x:Tensor)->Tensor:
+        #x.shape == (B, T, D)
         if runtime.DEBUG_CHECKS:
             self.forward_debug(x)
         

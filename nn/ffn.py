@@ -92,6 +92,7 @@ class FFN(nn.Module):
         )
     
     def forward(self, x:Tensor)->Tensor:
+        #x.shape == (B, T, D)
         if self.use_swiglu:
             l1,l2 = self.linear1(x).chunk(2, dim=-1)
             l1 = self.act_fn(l1)

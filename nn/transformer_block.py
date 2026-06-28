@@ -25,6 +25,54 @@ class TransformerBlock(nn.Module):
         ffn          : Literal['swiglu', 'mlp']='swiglu',
         activation   : str = "silu",
     ):
+        '''```
+        init_cfg = {
+            "layer_norm": {
+                "alpha": {
+                    "method":...
+                },
+                "beta": {
+                    "method":...
+                }
+            },
+            "attention": {
+                "qkv_linear": {
+                    "weight": {
+                        "method":...
+                    },
+                    "bias": {
+                        "method":...
+                    }
+                },
+                "output_linear": {
+                    "weight": {
+                        "method":...
+                    },
+                    "bias": {
+                        "method":...
+                    }
+                }
+            },
+            "ffn": {
+                "linear1": {
+                    "weight": {
+                        "method":...
+                    },
+                    "bias": {
+                        "method":...
+                    }
+                },
+                "linear2": {
+                    "weight": {
+                        "method":...
+                    },
+                    "bias": {
+                        "method":...
+                    }
+                }
+            }
+        }
+        ```'''
         super().__init__()
         dev_utils.type_check(
             ("embed_dim"    , embed_dim     , int),

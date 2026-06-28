@@ -39,6 +39,7 @@ class Embedding(nn.Module):
         )
     
     def forward(self, x:Tensor) -> Tensor:
+        #x.shape == (B, T)
         return self.weight[x.long()]
     
     @property
