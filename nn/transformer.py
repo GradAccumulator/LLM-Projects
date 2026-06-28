@@ -7,6 +7,8 @@ from .transformer_block import TransformerBlock
 from .attention import MultiHeadAttention
 from .rope import RoPE
 from configs import runtime
+from typing import Literal
+from utils import nn_utils
 
 class Transformer(nn.Module):
     def __init__(
@@ -18,14 +20,71 @@ class Transformer(nn.Module):
         vocab_size  : int,
         dropout     : float|int,
         init_cfg    : DictConfig|dict=None,
-        attn_dropout: float|int=None,
-        norm_eps    : float = 1e-5,
-        bias        : bool = True,
-        use_RoPE    : bool = True,
-        RoPE_base   : int|float=None,
-        ffn         : str = "swiglu",
-        activation  : str = "silu"
+        attn_dropout: float|int = None,
+        norm_eps    : float     = 1e-5,
+        bias        : bool      = True,
+        use_RoPE    : bool      = True,
+        RoPE_base   : int|float = None,
+        ffn         : str       = "swiglu",
+        activation  : str       = "silu",
+        max_seq_len : int       = None
     ):
+        '''```
+        init_cfg = {
+            "embedding": {
+                "method":...
+            },
+            (learnable positional embedding을 사용할 경우)
+            "pos_embedding": {
+                "method":...
+            },
+            "transformer_block": {
+                "layer_norm": {
+                    "alpha": {
+                        "method":...
+                    },
+                    "beta": {
+                        "method":...
+                    }
+                },
+                "attention": {
+                    "qkv_linear": {
+                        "weight": {
+                            "method":...
+                        },
+                        "bias": {
+                            "method":...
+                        }
+                    },
+                    "output_linear": {
+                        "weight": {
+                            "method":...
+                        },
+                        "bias": {
+                            "method":...
+                        }
+                    }
+                },
+                "ffn": {
+                    "linear1": {
+                        "weight": {
+                            "method":...
+                        },
+                        "bias": {
+                            "method":...
+                        }
+                    },
+                    "linear2": {
+                        "weight": {
+                            "method":...
+                        },
+                        "bias": {
+                            "method":...
+                        }
+                    }
+                }
+            }
+        ```'''
         super().__init__()
 
         dev_utils.type_check(
@@ -42,7 +101,8 @@ class Transformer(nn.Module):
             ("use_RoPE"     , use_RoPE      , bool),
             ("RoPE_base"    , RoPE_base     , int|float|None),
             ("activation"   , activation    , str),
-            ("ffn"          , ffn           , str)
+            ("ffn"          , ffn           , str),
+            ("max_seq_len"  , max_seq_len   , int|None)
             ,func_name="Transformer.__init__()"
         )
         init_cfg = dev_utils.make_dictconfig(init_cfg, default={
@@ -76,6 +136,14 @@ class Transformer(nn.Module):
                 activation  =activation
             ) for _ in range(num_layers)]
         )
+        if not use_RoPE:
+            if max_seq_len is None:
+                raise ValueError("<Transformer.__init__()> max_seq_len은 learnable positional embedding을 사용할 경우 필수입니다.")
+            self._pos_embedding = Embedding(
+                max_seq_len,
+                embed_dim,
+                init_cfg=init_cfg.pos_embedding
+            )
         
         self.cached_causal_mask:Tensor
 
@@ -113,6 +181,9 @@ class Transformer(nn.Module):
         #x.shape == (B, T)
 
         x = self.embedding(x)
+        if not self.use_RoPE:
+            pos_ids = torch.arange(x.size(1), device=x.device)
+            x = x + self._pos_embedding(pos_ids)[None, :, :]
         self.make_cached_tensors(x)
         for i,block in enumerate(self.transformer_blocks):
             x = block(
@@ -151,3 +222,5 @@ class Transformer(nn.Module):
     def ffn(self): return self.transformer_blocks[0].ffn_type
     @property
     def act_fn(self): return self.transformer_blocks[0].act_fn
+    @property
+    def positional_embedding(self): return "RoPE" if self.use_RoPE else "learnable"
