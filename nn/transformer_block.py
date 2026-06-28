@@ -1,12 +1,13 @@
 import torch, torch.nn as nn
 from torch import Tensor
 from omegaconf import DictConfig
-from ..utils import dev_utils
+from utils import dev_utils
 from .attention import MultiHeadAttention
 from .dropout import Dropout
 from .layer_norm import LayerNorm
 from .ffn import FFN
 from typing import Literal
+from configs import runtime
 
 class TransformerBlock(nn.Module):
     def __init__(
@@ -44,6 +45,11 @@ class TransformerBlock(nn.Module):
             "attention":None,
             "ffn":None
         })
+        dev_utils.check_dictconfig(
+            init_cfg,
+            ("layer_norm", "attention", "ffn"),
+            "TransformerBlock.__init__()"
+        )
         if attn_dropout is None:
             attn_dropout = dropout
         
@@ -61,7 +67,7 @@ class TransformerBlock(nn.Module):
             use_RoPE    =use_RoPE, 
             RoPE_base   =RoPE_base
         )
-        self.dropout = Dropout(dropout)
+        self._dropout = Dropout(dropout)
         
         self.ln2 = LayerNorm(
             embed_dim,
@@ -77,11 +83,51 @@ class TransformerBlock(nn.Module):
             use_bias    =bias
         )
     
-    def forward(self, x:Tensor)->Tensor:
+    def forward(
+        self, 
+        x:Tensor, 
+        mask:Tensor=None, 
+        cached_sin:Tensor=None, 
+        cached_cos:Tensor=None
+    )->Tensor:
         x = x + self.dropout(
-            self.attention(self.ln1(x))
+            self.attention(
+                self.ln1(x), 
+                mask=mask, 
+                cached_sin=cached_sin, 
+                cached_cos=cached_cos
+            )
         )
         x = x + self.dropout(
             self.ffn(self.ln2(x))
         )
         return x
+
+    @property
+    def embed_dim(self): return self.ln1.normalized_shape[-1]
+    @property
+    def num_heads(self): return self.attention.num_heads
+    @property
+    def ffn_dim(self):return self.ffn.ffn_dim
+    @property
+    def use_bias(self): return self.attention.use_bias and self.ffn.use_bias
+    @property
+    def use_RoPE(self): return self.attention.use_RoPE
+    @property
+    def RoPE_base(self): return self.attention.RoPE_base
+    @property
+    def act_fn(self): return self.ffn.act_fn
+    @property
+    def activation_name(self): return self.ffn.activation_name
+    @property
+    def ffn_type(self): return self.ffn.ffn_type
+    @property
+    def attn_dropout(self): return self.attention.dropout
+    @property
+    def attn_dropout_p(self): return self.attention.dropout_p
+    @property
+    def dropout(self): return self._dropout
+    @property
+    def dropout_p(self): return self._dropout.p
+    @property
+    def norm_eps(self): return self.ln1.eps

@@ -24,3 +24,28 @@ def make_dictconfig(arg:DictConfig|dict|None, default:dict|None=None)->DictConfi
         return OmegaConf.create(default)
     else:
         return OmegaConf.create(arg)
+
+def check_dictconfig(arg:DictConfig|dict, needed_keys:list, func_name:str):
+    def _get_all_keys(arg:DictConfig, keys:set=None):
+        if keys is None:
+            keys = set(arg.keys())
+        else:
+            keys.update(arg.keys())
+        
+        for v in arg.values():
+            if isinstance(v, DictConfig):
+                keys = _get_all_keys(v, keys=keys)
+        
+        return keys
+        
+    arg = make_dictconfig(arg)
+    all_keys = _get_all_keys(arg)
+    needed_keys = set(needed_keys if needed_keys is not None else [])
+    
+    for k in needed_keys:
+        if k not in all_keys:
+            raise KeyError(
+                f"<{func_name}>"
+                f" cfg의 key가 잘못 전달되었습니다."
+                f" 예상한 key: {needed_keys}, 실제 key:{all_keys}"
+            )

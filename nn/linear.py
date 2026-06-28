@@ -1,7 +1,8 @@
 import torch, torch.nn as nn
 from torch import Tensor
 from omegaconf import DictConfig
-from ..utils import nn_utils, dev_utils
+from utils import nn_utils, dev_utils
+from configs import runtime
 
 class Linear(nn.Module):
     def __init__(self, in_features:int, out_features:int,*, init_cfg:DictConfig|dict=None, use_bias:bool=True):
@@ -40,6 +41,11 @@ class Linear(nn.Module):
                 "method":"zeros"
             }
         })
+        dev_utils.check_dictconfig(
+            init_cfg,
+            ("weight", "bias", "method"),
+            "Linear.__init__()"
+        )
         
         self._weight = nn.Parameter(
             nn_utils.init_tensor(out_features, in_features, init_cfg=init_cfg.weight)
@@ -49,9 +55,23 @@ class Linear(nn.Module):
                 nn_utils.init_tensor(out_features, init_cfg=init_cfg.bias)
             )
     
+    def forward_debug(self, x:Tensor):
+        if x.size(-1) != self.in_features:
+            raise ValueError(
+                f"<Linear.forward()> 입력 텐서의 마지막 차원의 크기가 부적절합니다."
+                f"예상한 크기: {self.in_features}, 실제 크기:{x.size(-1)}"
+            )
+    
     def forward(self, x:Tensor) -> Tensor:
+        if runtime.DEBUG_CHECKS:
+            self.forward_debug(x)
+        
         out = x@self.weight.T
         if self.use_bias:
+            if not hasattr(self, "_bias"):
+                raise ValueError(
+                    "<Linear.forward()> use_bias=True로 설정되어있지만 bias 텐서가 존재하지 않습니다."
+                )
             out = out + self.bias
         return out
     

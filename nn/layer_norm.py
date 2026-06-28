@@ -1,7 +1,8 @@
 import torch, torch.nn as nn
 from torch import Tensor
 from omegaconf import DictConfig
-from ..utils import nn_utils, dev_utils
+from utils import nn_utils, dev_utils
+from configs import runtime
 
 class LayerNorm(nn.Module):
     def __init__(
@@ -20,7 +21,6 @@ class LayerNorm(nn.Module):
             }
         }
         ```'''
-        
         super().__init__()
         dev_utils.type_check(
             ("init_cfg"     , init_cfg      , DictConfig|dict|None),
@@ -54,6 +54,11 @@ class LayerNorm(nn.Module):
                 "method":"zeros"
             }
         })
+        dev_utils.check_dictconfig(
+            init_cfg,
+            ("alpha", "beta", "method"),
+            "LayerNorm.__init__()"
+        )
         
         self._alpha = nn.Parameter(
             nn_utils.init_tensor(*normalized_shape, init_cfg=init_cfg.alpha)
@@ -62,12 +67,16 @@ class LayerNorm(nn.Module):
             nn_utils.init_tensor(*normalized_shape, init_cfg=init_cfg.beta)
         )
     
-    def forward(self, x:Tensor)->Tensor:
+    def forward_debug(self, x:Tensor):
         if self.normalized_shape != x.shape[-len(self.normalized_shape):]:
             raise ValueError(
                 f"<LayerNorm.forward()> 입력 텐서의 shape는 {tuple(self.normalized_shape)}로 끝나야 합니다. "
                 f"(현재: {tuple(x.shape)})"
             )
+    
+    def forward(self, x:Tensor)->Tensor:
+        if runtime.DEBUG_CHECKS:
+            self.forward_debug(x)
         
         mean = x.mean(dim=self.normalized_dims, keepdim=True)
         var = x.var(dim=self.normalized_dims, keepdim=True, unbiased=False)

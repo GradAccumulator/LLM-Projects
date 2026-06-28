@@ -1,6 +1,6 @@
 import torch, torch.nn as nn
 from torch import Tensor
-from ..utils import dev_utils
+from utils import dev_utils
 
 class Softmax(nn.Module):
     def __init__(self, dim:int=-1, temperature:float=1.0):

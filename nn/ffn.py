@@ -1,7 +1,7 @@
 import torch, torch.nn as nn
 from torch import Tensor
 from omegaconf import DictConfig
-from ..utils import dev_utils
+from utils import dev_utils
 from .silu import SiLU
 from .linear import Linear
 from typing import Literal
@@ -18,35 +18,6 @@ class FFN(nn.Module):
         use_bias:bool            =False
     ):
         '''```
-        ffn_type == 'swiglu':
-        init_cfg = {
-            "linear1": {
-                "weight":{
-                    "method":...
-                },
-                "bias":{
-                    "method":...
-                }
-            },
-            "linear2": {
-                "weight":{
-                    "method":...
-                },
-                "bias":{
-                    "method":...
-                }
-            },
-            "linear3": {
-                "weight":{
-                    "method":...
-                },
-                "bias":{
-                    "method":...
-                }
-            }
-        }
-        
-        ffn_type == 'mlp':
         init_cfg = {
             'linear1': {
                 "weight":{
@@ -65,7 +36,6 @@ class FFN(nn.Module):
                 }
             }
         }
-        
         ```'''
         super().__init__()
         
@@ -80,36 +50,31 @@ class FFN(nn.Module):
         if ffn_type not in ["swiglu", "mlp"]:
             raise ValueError(f"<FFN.__init__()> ffn_type이 지원되지 않는 유형입니다. 현재: {ffn_type}")
         
+        self._use_bias = use_bias
+        
         init_cfg = dev_utils.make_dictconfig(init_cfg, default={
             'linear1':None,
-            'linear2':None,
-            'linear3':None
+            'linear2':None
         })
+        dev_utils.check_dictconfig(
+            init_cfg,
+            ("linear1", "linear2"),
+            "FFN.__init__()"
+        )
+        
         match activation:
             case 'silu'|None:
-                self.activation = SiLU()
+                self.act_fn = SiLU()
             case _:
-                raise ValueError("<FFN.__init__()> activation 인자가 지원되지 않는 유형입니다.")
+                raise ValueError(f"<FFN.__init__()> activation 인자가 지원되지 않는 유형입니다 : {activation}")
         
         self._ffn_type = ffn_type
         self._use_swiglu = ffn_type == 'swiglu'
-        if ffn_type == 'swiglu':
+        if self.use_swiglu:
             self.linear1 = Linear(
                 in_features, 
-                ffn_dim, 
+                ffn_dim*2, 
                 init_cfg=init_cfg.linear1,
-                use_bias=use_bias
-            )
-            self.linear2 = Linear(
-                in_features, 
-                ffn_dim, 
-                init_cfg=init_cfg.linear2,
-                use_bias=use_bias
-            )
-            self.linear3 = Linear(
-                ffn_dim, 
-                in_features, 
-                init_cfg=init_cfg.linear3,
                 use_bias=use_bias
             )
         else:
@@ -119,26 +84,24 @@ class FFN(nn.Module):
                 init_cfg=init_cfg.linear1,
                 use_bias=use_bias
             )
-            self.linear2 = Linear(
-                ffn_dim, 
-                in_features, 
-                init_cfg=init_cfg.linear2,
-                use_bias=use_bias
-            )
+        self.linear2 = Linear(
+            ffn_dim, 
+            in_features, 
+            init_cfg=init_cfg.linear2,
+            use_bias=use_bias
+        )
     
     def forward(self, x:Tensor)->Tensor:
         if self.use_swiglu:
-            l1 = self.linear1(x)
-            l1 = self.activation(l1)
+            l1,l2 = self.linear1(x).chunk(2, dim=-1)
+            l1 = self.act_fn(l1)
             
-            l2 = self.linear2(x)
-            
-            x = self.linear3(l1*l2)
+            x = self.linear2(l1*l2)
         
         else:
             x = self.linear1(x)
             
-            x = self.activation(x)
+            x = self.act_fn(x)
             
             x = self.linear2(x)
         
@@ -147,9 +110,11 @@ class FFN(nn.Module):
     @property
     def in_features(self): return self.linear1.in_features
     @property
-    def ffn_dim(self): return self.linear1.out_features
+    def out_features(self): return self.linear2.out_features
     @property
-    def use_bias(self): return self.linear1.use_bias
+    def ffn_dim(self): return self.linear2.in_features
+    @property
+    def use_bias(self): return self._use_bias
     @property
     def ffn_type(self): return self._ffn_type
     @property

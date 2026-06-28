@@ -1,0 +1,1 @@
+DEBUG_CHECKS = True

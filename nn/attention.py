@@ -1,11 +1,12 @@
 import torch, torch.nn as nn, math
 from torch import Tensor
 from omegaconf import DictConfig
-from ..utils import dev_utils
+from utils import dev_utils
 from .linear import Linear
 from .rope import RoPE
 from .softmax import Softmax
 from .dropout import Dropout
+from configs import runtime
 
 class MultiHeadAttention(nn.Module):
     def __init__(
@@ -63,18 +64,25 @@ class MultiHeadAttention(nn.Module):
                 "output_linear": None
             }
         )
+        dev_utils.check_dictconfig(
+            init_cfg, 
+            ("qkv_linear", "output_linear"), 
+            "MultiHeadAttention.__init__()"
+        )
         
         self.qkv_linear = Linear(embed_dim, embed_dim*3, init_cfg=init_cfg.qkv_linear, use_bias=bias)
         self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.output_linear, use_bias=bias)
         self.softmax = Softmax(dim=-1)
         self.dropout = Dropout(dropout)
         self.cached_mask:Tensor
+        self._use_bias = bias
         
         self._use_RoPE = use_RoPE
         if use_RoPE:
             self.RoPE = RoPE(RoPE_base)
             
-    def _qkv_projection(self, x:Tensor)->tuple[int,int, Tensor, Tensor, Tensor]:
+    def _qkv_projection(self, x:Tensor)->tuple[int, Tensor, Tensor, Tensor]:
+        '''return B, Q,K,V'''
         #x.shape == (B,T,D)
         B = x.size(0)
         T = x.size(1)
@@ -87,19 +95,24 @@ class MultiHeadAttention(nn.Module):
         V = V.reshape(B, T, self.num_heads, self.d_head).transpose(1,2)
         #Q, K, V shape == (B, H, T, D)
         
-        return B,T, Q,K,V
+        return B, Q,K,V
     
-    def _apply_mask(self, scores:Tensor, T:int, device:torch.device)->Tensor:
-        if not hasattr(self, 'cached_mask') or self.cached_mask.shape != (T,T):
+    @staticmethod
+    def make_causal_mask(T: int, device: torch.device) -> Tensor:
+        return torch.triu(
+            torch.ones(T, T, device=device, dtype=torch.bool),
+            diagonal=1
+        )
+    
+    def _apply_mask(self, scores:Tensor, T:int, device:torch.device, mask:Tensor=None)->Tensor:
+        need_new_mask = (mask is None) and not ( hasattr(self, 'cached_mask') and self.cached_mask.shape == (T,T))
+        if need_new_mask:
             self.register_buffer(
                 'cached_mask',
-                torch.triu(
-                    torch.ones(T,T, device=device, dtype=torch.bool), 
-                    diagonal=1
-                ),
+                self.make_causal_mask(T, device),
                 persistent=False
             )
-        scores = scores.masked_fill(self.cached_mask, -float('inf'))
+        scores = scores.masked_fill(mask if mask is not None else self.cached_mask, -float('inf'))
         
         return scores
     
@@ -112,17 +125,46 @@ class MultiHeadAttention(nn.Module):
         
         return out
     
-    def forward(self, x:Tensor) -> Tensor:
+    def forward_debug(self, x:Tensor, mask:Tensor, T:int) -> Tensor:
+        if mask is not None and mask.shape != (T,T):
+            raise ValueError(
+                f"mask의 shape이 입력 텐서에 맞지 않습니다."
+                f"\nmask.shape: {tuple(mask.shape)}, 입력 텐서 shape: {tuple(x.shape)}, 필요한 mask shape: {(T,T)}"
+            )
+        if x.ndim != 3:
+            raise ValueError(
+                f"<MultiHeadAttention.forward()> 입력 x는 (B,T,D) 형태의 3차원 텐서여야 합니다. 현재 x.shape={tuple(x.shape)}"
+            )
+        if x.size(-1) != self.embed_dim:
+            raise ValueError(
+                f"<MultiHeadAttention.forward()> 입력 x의 마지막 차원은 embed_dim={self.embed_dim}이어야 합니다. "
+                f"현재 x.shape={tuple(x.shape)}"
+            )
+    
+    def forward(
+        self, 
+        x:Tensor, 
+        mask:Tensor=None, 
+        cached_sin:Tensor=None, 
+        cached_cos:Tensor=None
+    ) -> Tensor:
         device = x.device
+        T = x.size(1)
+        if runtime.DEBUG_CHECKS:
+            self.forward_debug(x, mask, T)
         
-        B,T, Q,K,V = self._qkv_projection(x)
+        B, Q,K,V = self._qkv_projection(x)
 
         if self.use_RoPE:
-            Q,K = self.RoPE(Q, K)
+            Q,K = self.RoPE(
+                Q, K, 
+                cached_sin  =cached_sin, 
+                cached_cos =cached_cos
+            )
         
         scores = Q@K.transpose(-1, -2)/math.sqrt(self.d_head)
         
-        scores = self._apply_mask(scores, T, device)
+        scores = self._apply_mask(scores, T, device, mask=mask)
         
         out = self._attention(scores, V, B, T)
         out = self.out_linear(out)
@@ -136,4 +178,14 @@ class MultiHeadAttention(nn.Module):
     @property
     def num_heads(self): return self._num_heads
     @property
-    def use_RoPE(self):return self._use_RoPE
+    def use_RoPE(self): return self._use_RoPE
+    @property
+    def dropout_p(self): return self.dropout.p
+    @property
+    def use_bias(self): return self._use_bias
+    @property
+    def RoPE_base(self):
+        if self.use_RoPE:
+            return self.RoPE.base
+        else:
+            return None

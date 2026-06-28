@@ -1,11 +1,12 @@
 import torch, torch.nn as nn
 from torch import Tensor
 from omegaconf import DictConfig
-from ..utils import dev_utils
+from utils import dev_utils
 from .embedding import Embedding
 from .transformer_block import TransformerBlock
 from .attention import MultiHeadAttention
-import warnings
+from .rope import RoPE
+from configs import runtime
 
 class Transformer(nn.Module):
     def __init__(
@@ -48,6 +49,11 @@ class Transformer(nn.Module):
             "embedding":None,
             "transformer_block":None
         })
+        dev_utils.check_dictconfig(
+            init_cfg,
+            ("embedding", "transformer_block"),
+            "Transformer.__init__()"
+        )
 
         self.embedding = Embedding(
             vocab_size,
@@ -72,22 +78,48 @@ class Transformer(nn.Module):
         )
         
         self.cached_causal_mask:Tensor
+
+    
+    def make_cached_tensors(self, x:Tensor):
+        '''x.shape == (B, T, D)'''
+        T = x.size(1)
+        device = x.device
+        dtype = x.dtype
+        
+        if not hasattr(self, 'cached_causal_mask') or self.cached_causal_mask.shape != (T,T) :
+            self.register_buffer(
+                'cached_causal_mask',
+                MultiHeadAttention.make_causal_mask(T, device),
+                persistent=False
+            )
+        
+        need_new_cached_sin_cos = (
+            not hasattr(self, 'cached_sin')
+            or self.cached_sin.shape != (T, self.embed_dim // 2)
+        )
+        if runtime.DEBUG_CHECKS:
+            need_new_cached_sin_cos = need_new_cached_sin_cos or (
+                not hasattr(self, 'cached_cos')
+                or self.cached_cos.shape != (T, self.embed_dim // 2)
+            )
+        if need_new_cached_sin_cos:
+            if self.use_RoPE:
+                rope:RoPE = self.transformer_blocks[0].attention.RoPE
+                sin, cos = rope.compute_sin_cos(T, self.d_head, device, dtype, rope.base)
+                self.register_buffer("cached_sin", sin, persistent=False)
+                self.register_buffer("cached_cos", cos, persistent=False)
     
     def forward(self, x:Tensor) -> Tensor:
         #x.shape == (B, T)
-        T = x.size(1)
-        if not (hasattr(self, 'cached_causal_mask') and self.cached_causal_mask.shape == (T,T)): 
-            self.register_buffer(
-                'cached_causal_mask',
-                MultiHeadAttention.make_causal_mask(T, x.device),
-                persistent=False
-            )
 
         x = self.embedding(x)
+        self.make_cached_tensors(x)
         for i,block in enumerate(self.transformer_blocks):
             x = block(
                 x,
-                mask=self.cached_causal_mask
+                mask=self.cached_causal_mask,
+                cached_sin=self.cached_sin,
+                cached_cos=self.cached_cos
             )
         return x@self.embedding.weight.T
     
@@ -97,6 +129,8 @@ class Transformer(nn.Module):
     def embed_dim(self): return self.embedding.embed_dim
     @property
     def num_heads(self): return self.transformer_blocks[0].num_heads
+    @property
+    def d_head(self): return self.embed_dim // self.num_heads
     @property
     def ffn_dim(self): return self.transformer_blocks[0].ffn.ffn_dim
     @property
