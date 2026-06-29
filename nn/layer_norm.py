@@ -8,12 +8,13 @@ class LayerNorm(nn.Module):
     def __init__(
         self, 
         *normalized_shape:int, 
+        eps:float=1e-5,
+        bias:bool=True,
         init_cfg:DictConfig|dict=None, 
-        eps:float=1e-5
     ):
         '''```
         init_cfg = { 
-            "alpha": { 
+            "gamma": { 
                 "method":... 
             },
             "beta": {
@@ -24,6 +25,7 @@ class LayerNorm(nn.Module):
         super().__init__()
         dev_utils.type_check(
             ("init_cfg"     , init_cfg      , DictConfig|dict|None),
+            ("bias"         , bias          , bool),
             ("eps"          , eps           , float)
             ,func_name="LayerNorm.__init__()"
         )
@@ -44,10 +46,11 @@ class LayerNorm(nn.Module):
             raise ValueError("<LayerNorm.__init__()> eps는 반드시 양수여야 합니다.")
         
         self._eps = eps
+        self._use_bias = bias
         self._normalized_dims = tuple(range(-len(normalized_shape), 0))
         
         init_cfg = dev_utils.make_dictconfig(init_cfg, default={
-            "alpha": {
+            "gamma": {
                 "method":"ones"
             },
             "beta": {
@@ -56,16 +59,17 @@ class LayerNorm(nn.Module):
         })
         dev_utils.check_dictconfig(
             init_cfg,
-            ("alpha", "beta", "method"),
+            ("gamma", "beta", "method"),
             "LayerNorm.__init__()"
         )
         
-        self._alpha = nn.Parameter(
-            nn_utils.init_tensor(*normalized_shape, init_cfg=init_cfg.alpha)
+        self._gamma = nn.Parameter(
+            nn_utils.init_tensor(*normalized_shape, init_cfg=init_cfg.gamma)
         )
-        self._beta = nn.Parameter(
-            nn_utils.init_tensor(*normalized_shape, init_cfg=init_cfg.beta)
-        )
+        if self.use_bias:
+            self._beta = nn.Parameter(
+                nn_utils.init_tensor(*normalized_shape, init_cfg=init_cfg.beta)
+            )
     
     def forward_debug(self, x:Tensor):
         #x.shape == (B, T, D), self.normalized_shape == (D,)
@@ -85,15 +89,21 @@ class LayerNorm(nn.Module):
         
         x_hat = (x-mean)/(var+self.eps).sqrt()
         
-        return self.alpha * x_hat + self.beta
+        out =  self.gamma * x_hat
+        if self.use_bias:
+            out = out + self.beta
+        
+        return out
     
     @property
-    def alpha(self):return self._alpha
+    def gamma(self):return self._gamma
     @property
-    def beta(self):return self._beta
+    def beta(self):return self._beta if self.use_bias else None
     @property
     def eps(self):return self._eps
     @property
-    def normalized_shape(self):return self.alpha.shape
+    def normalized_shape(self):return self.gamma.shape
     @property
     def normalized_dims(self):return self._normalized_dims
+    @property
+    def use_bias(self): return self._use_bias

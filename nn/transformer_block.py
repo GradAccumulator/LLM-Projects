@@ -16,14 +16,16 @@ class TransformerBlock(nn.Module):
         num_heads    : int,
         ffn_dim      : int,
         dropout      : float|int,
-        init_cfg     : DictConfig|dict=None,
         attn_dropout : float|int=None,
         norm_eps     : float = 1e-5,
-        bias         : bool = True,
+        ffn_bias     : bool = False,
+        attn_bias    : bool = False,
+        norm_bias    : bool = True,
         use_RoPE     : bool = True,
         RoPE_base    : int|float=None,
         ffn          : Literal['swiglu', 'mlp']='swiglu',
         activation   : str = "silu",
+        init_cfg     : DictConfig|dict=None,
     ):
         '''```
         init_cfg = {
@@ -82,7 +84,9 @@ class TransformerBlock(nn.Module):
             ("init_cfg"     , init_cfg      , DictConfig|dict|None),
             ("attn_dropout" , attn_dropout  , float|None|int),
             ("norm_eps"     , norm_eps      , float),
-            ("bias"         , bias          , bool),
+            ("ffn_bias"     , ffn_bias      , bool),
+            ("attn_bias"    , attn_bias     , bool),
+            ("norm_bias"    , norm_bias     , bool),
             ("use_RoPE"     , use_RoPE      , bool),
             ("RoPE_base"    , RoPE_base     , int|float|None),
             ("activation"   , activation    , str)
@@ -103,24 +107,26 @@ class TransformerBlock(nn.Module):
         
         self.ln1 = LayerNorm(
             embed_dim,
+            eps         =norm_eps,
+            bias        =norm_bias,
             init_cfg    =init_cfg.layer_norm,
-            eps         =norm_eps
         )
         self.attention = MultiHeadAttention(
             embed_dim, 
             num_heads, 
             attn_dropout,
-            init_cfg    =init_cfg.attention, 
-            bias        =bias, 
+            bias        =attn_bias, 
             use_RoPE    =use_RoPE, 
-            RoPE_base   =RoPE_base
+            RoPE_base   =RoPE_base,
+            init_cfg    =init_cfg.attention,
         )
         self._dropout = Dropout(dropout)
         
         self.ln2 = LayerNorm(
             embed_dim,
+            bias        =norm_bias,
+            eps         =norm_eps,
             init_cfg    =init_cfg.layer_norm,
-            eps         =norm_eps
         )
         self.ffn = FFN(
             embed_dim,
@@ -128,7 +134,7 @@ class TransformerBlock(nn.Module):
             ffn,
             activation,
             init_cfg    =init_cfg.ffn,
-            use_bias    =bias
+            use_bias    =ffn_bias
         )
     
     def forward(

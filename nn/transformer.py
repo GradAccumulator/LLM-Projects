@@ -9,25 +9,186 @@ from .rope import RoPE
 from configs import runtime
 from typing import Literal
 from utils import nn_utils
+from typing import overload
 
 class Transformer(nn.Module):
+    @overload
+    def __init__(self, cfg:DictConfig):
+        '''```
+        cfg = {
+            "model": {
+                "vocab_size": int,
+                "max_seq_len": int,
+                "num_layers": int,
+                "embed_dim": int,
+                "num_heads": int,
+                "ffn_dim": int,
+                "dropout": float|int,
+                "bias": bool,
+                "attention": {
+                    "positional_embedding": Literal["rope", "learnable"],
+                    "dropout": float|int,
+                    "RoPE": {
+                        "base": int|float
+                    }
+                }
+            },
+            "init" : {
+                "embedding": {
+                    "method":...
+                },
+                (learnable positional embedding을 사용할 경우)
+                "pos_embedding": {
+                    "method":...
+                },
+                "transformer_block": {
+                    "layer_norm": {
+                        "alpha": {
+                            "method":...
+                        },
+                        "beta": {
+                            "method":...
+                        }
+                    },
+                    "attention": {
+                        "qkv_linear": {
+                            "weight": {
+                                "method":...
+                            },
+                            "bias": {
+                                "method":...
+                            }
+                        },
+                        "output_linear": {
+                            "weight": {
+                                "method":...
+                            },
+                            "bias": {
+                                "method":...
+                            }
+                        }
+                    },
+                    "ffn": {
+                        "linear1": {
+                            "weight": {
+                                "method":...
+                            },
+                            "bias": {
+                                "method":...
+                            }
+                        },
+                        "linear2": {
+                            "weight": {
+                                "method":...
+                            },
+                            "bias": {
+                                "method":...
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ```'''
+        ...
+    @overload
     def __init__(
         self,
-        num_layers  : int,
-        embed_dim   : int,
-        num_heads   : int,
-        ffn_dim     : int,
         vocab_size  : int,
-        dropout     : float|int,
-        init_cfg    : DictConfig|dict=None,
+        num_layers  : int,
+        num_heads   : int,
+        embed_dim   : int,
+        ffn_dim     : int,
+        dropout     : float|int=0.0,
         attn_dropout: float|int = None,
+        max_seq_len : int       = None,
         norm_eps    : float     = 1e-5,
-        bias        : bool      = True,
+        ffn_bias    : bool      = False,
+        attn_bias   : bool      = False,
+        norm_bias   : bool      = True,
         use_RoPE    : bool      = True,
         RoPE_base   : int|float = None,
         ffn         : str       = "swiglu",
         activation  : str       = "silu",
-        max_seq_len : int       = None
+        init_cfg    : DictConfig|dict=None
+    ):
+        '''```
+        init_cfg = {
+            "embedding": {
+                "method":...
+            },
+            (learnable positional embedding을 사용할 경우)
+            "pos_embedding": {
+                "method":...
+            },
+            "transformer_block": {
+                "layer_norm": {
+                    "alpha": {
+                        "method":...
+                    },
+                    "beta": {
+                        "method":...
+                    }
+                },
+                "attention": {
+                    "qkv_linear": {
+                        "weight": {
+                            "method":...
+                        },
+                        "bias": {
+                            "method":...
+                        }
+                    },
+                    "output_linear": {
+                        "weight": {
+                            "method":...
+                        },
+                        "bias": {
+                            "method":...
+                        }
+                    }
+                },
+                "ffn": {
+                    "linear1": {
+                        "weight": {
+                            "method":...
+                        },
+                        "bias": {
+                            "method":...
+                        }
+                    },
+                    "linear2": {
+                        "weight": {
+                            "method":...
+                        },
+                        "bias": {
+                            "method":...
+                        }
+                    }
+                }
+            }
+        ```'''
+        ...
+    nn.Transformer()
+    def __init__(
+        self,
+        vocab_size  : int,
+        num_layers  : int=None,
+        num_heads   : int=None,
+        embed_dim   : int=None,
+        ffn_dim     : int=None,
+        dropout     : float|int=0.0,
+        attn_dropout: float|int = None,
+        max_seq_len : int       = None,
+        norm_eps    : float     = 1e-5,
+        ffn_bias    : bool      = False,
+        attn_bias   : bool      = False,
+        norm_bias   : bool      = True,
+        use_RoPE    : bool      = True,
+        RoPE_base   : int|float = None,
+        ffn         : str       = "swiglu",
+        activation  : str       = "silu",
+        init_cfg    : DictConfig|dict=None
     ):
         '''```
         init_cfg = {
@@ -87,6 +248,31 @@ class Transformer(nn.Module):
         ```'''
         super().__init__()
 
+        if isinstance(vocab_size, DictConfig):
+            cfg = num_layers
+            model_cfg = cfg.model
+            init_cfg = cfg.init
+
+            vocab_size   = model_cfg.vocab_size
+            num_layers   = model_cfg.num_layers
+            num_heads    = model_cfg.num_heads
+            embed_dim    = model_cfg.embed_dim
+            dropout      = model_cfg.dropout
+            max_seq_len  = model_cfg.max_seq_len
+            
+            ffn          = model_cfg.ffn.type
+            activation   = model_cfg.ffn.activation
+            ffn_dim      = model_cfg.ffn.dim
+            ffn_bias     = model_cfg.ffn.bias
+            
+            use_RoPE     = model_cfg.use_rope
+            attn_dropout = model_cfg.attention.dropout
+            RoPE_base    = model_cfg.attention.rope.base
+
+            norm_eps     = model_cfg.layernorm.eps
+            norm_bias    = model_cfg.layernorm.bias
+
+
         dev_utils.type_check(
             ("num_layers"   , num_layers    , int),
             ("embed_dim"    , embed_dim     , int),
@@ -97,7 +283,9 @@ class Transformer(nn.Module):
             ("init_cfg"     , init_cfg      , DictConfig|dict|None),
             ("attn_dropout" , attn_dropout  , float|int|None),
             ("norm_eps"     , norm_eps      , float),
-            ("bias"         , bias          , bool),
+            ("ffn_bias"     , ffn_bias      , bool),
+            ("attn_bias"    , attn_bias     , bool),
+            ("norm_bias"    , norm_bias     , bool),
             ("use_RoPE"     , use_RoPE      , bool),
             ("RoPE_base"    , RoPE_base     , int|float|None),
             ("activation"   , activation    , str),
@@ -126,14 +314,16 @@ class Transformer(nn.Module):
                 num_heads   =num_heads,
                 ffn_dim     =ffn_dim,
                 dropout     =dropout,
-                init_cfg    =init_cfg.transformer_block,
                 attn_dropout=attn_dropout,
                 norm_eps    =norm_eps,
-                bias        =bias,
+                ffn_bias    =ffn_bias,
+                attn_bias   =attn_bias,
+                norm_bias   =norm_bias,
                 use_RoPE    =use_RoPE,
                 RoPE_base   =RoPE_base,
                 ffn         =ffn,
-                activation  =activation
+                activation  =activation,
+                init_cfg    =init_cfg.transformer_block,
             ) for _ in range(num_layers)]
         )
         if not use_RoPE:

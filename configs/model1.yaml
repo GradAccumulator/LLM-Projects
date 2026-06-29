@@ -1,24 +1,33 @@
 model:
-  vocab_size: 0
-  max_seq_len: 0
-  n_layer: 0
-  d_model: 0
-  n_head: 0
-  d_ffn: 0
+  vocab_size: 100
+  num_layers: 4
+  num_heads: 4
+  embed_dim: 128
   dropout: 0.0
-  bias: false
+  max_seq_len: 128
+  ffn:
+    type: "swiglu"
+    activation: "silu"
+    dim: 256
+    bias: false
   attention:
-    positional_embedding: "rope" #"learnable"
+    use_rope: true
     dropout: 0.0
-    RoPE:
+    rope:
       base: 10000
+  layernorm:
+    bias: true
+    eps: 1.0e-5
+
+
+
 
 init:
   embedding:
     method: "normal"
     std: 0.02
-
-    
+  
+  
   transformer_block:
     layer_norm:
       alpha:
@@ -26,7 +35,6 @@ init:
       beta:
         method: "zeros"
     
-
     attention:
       qkv_linear:
         weight:
