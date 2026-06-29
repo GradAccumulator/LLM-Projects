@@ -249,7 +249,7 @@ class Transformer(nn.Module):
         super().__init__()
 
         if isinstance(vocab_size, DictConfig):
-            cfg = num_layers
+            cfg = vocab_size
             model_cfg = cfg.model
             init_cfg = cfg.init
 
@@ -265,7 +265,7 @@ class Transformer(nn.Module):
             ffn_dim      = model_cfg.ffn.dim
             ffn_bias     = model_cfg.ffn.bias
             
-            use_RoPE     = model_cfg.use_rope
+            use_RoPE     = model_cfg.attention.use_rope
             attn_dropout = model_cfg.attention.dropout
             RoPE_base    = model_cfg.attention.rope.base
 

@@ -29,7 +29,7 @@ class MultiHeadAttention(nn.Module):
                     "method":...
                 }
             },
-            "output_linear": {
+            "out_linear": {
                 "weight": {
                     "method":...
                 },
@@ -61,17 +61,17 @@ class MultiHeadAttention(nn.Module):
 
         init_cfg = dev_utils.make_dictconfig(init_cfg,default={
                 "qkv_linear": None,
-                "output_linear": None
+                "out_linear": None
             }
         )
         dev_utils.check_dictconfig(
             init_cfg, 
-            ("qkv_linear", "output_linear"), 
+            ("qkv_linear", "out_linear"), 
             "MultiHeadAttention.__init__()"
         )
         
         self.qkv_linear = Linear(embed_dim, embed_dim*3, init_cfg=init_cfg.qkv_linear, use_bias=bias)
-        self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.output_linear, use_bias=bias)
+        self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.out_linear, use_bias=bias)
         self.softmax = Softmax(dim=-1)
         self.dropout = Dropout(dropout)
         self.cached_mask:Tensor

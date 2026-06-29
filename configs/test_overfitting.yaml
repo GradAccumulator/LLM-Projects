@@ -1,0 +1,65 @@
+model:
+  vocab_size: 100
+  num_layers: 4
+  num_heads: 4
+  embed_dim: 128
+  dropout: 0.0
+  max_seq_len: 128
+  ffn:
+    type: "swiglu"
+    activation: "silu"
+    dim: 256
+    bias: false
+  attention:
+    use_rope: true
+    dropout: 0.0
+    rope:
+      base: 10000
+  layernorm:
+    bias: true
+    eps: 1.0e-5
+
+
+
+init:
+  embedding:
+    method: "normal"
+    std: 0.02
+  
+  
+  transformer_block:
+    layer_norm:
+      gamma:
+        method: "ones"
+      beta:
+        method: "zeros"
+    
+    attention:
+      qkv_linear:
+        weight:
+          method: "normal"
+          std: 0.02
+        bias:
+          method: "zeros"
+
+      out_linear:
+        weight:
+          method: "normal"
+          std: 0.02
+        bias:
+          method: "zeros"
+        
+    ffn:
+      linear1:
+        weight:
+          method: "normal"
+          std: 0.02
+        bias:
+          method: "zeros"
+        
+      linear2:
+        weight:
+          method: "normal"
+          std: 0.02
+        bias:
+          method: "zeros"

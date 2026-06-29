@@ -128,6 +128,7 @@ class TransformerBlock(nn.Module):
             eps         =norm_eps,
             init_cfg    =init_cfg.layer_norm,
         )
+        
         self.ffn = FFN(
             embed_dim,
             ffn_dim,
