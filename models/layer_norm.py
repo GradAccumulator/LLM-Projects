@@ -59,7 +59,7 @@ class LayerNorm(nn.Module):
         })
         dev_utils.check_dictconfig(
             init_cfg,
-            ("gamma", "beta", "method"),
+            ("gamma", "beta", "gamma.method", "beta.method"),
             "LayerNorm.__init__()"
         )
         

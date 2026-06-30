@@ -43,7 +43,7 @@ class Linear(nn.Module):
         })
         dev_utils.check_dictconfig(
             init_cfg,
-            ("weight", "bias", "method"),
+            ("weight", "bias", "weight.method", "bias.method"),
             "Linear.__init__()"
         )
         
