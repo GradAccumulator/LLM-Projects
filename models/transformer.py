@@ -169,7 +169,7 @@ class Transformer(nn.Module):
             }
         ```'''
         ...
-    nn.Transformer()
+    
     def __init__(
         self,
         vocab_size  : int,

@@ -1,14 +1,14 @@
 model:
   vocab_size: 100
-  num_layers: 4
-  num_heads: 4
-  embed_dim: 128
+  num_layers: 12
+  num_heads: 24
+  embed_dim: 1536
   dropout: 0.0
-  max_seq_len: 128
+  max_seq_len: 256
   ffn:
     type: swiglu
     activation: silu
-    dim: 256
+    dim: 6144
     bias: false
   attention:
     use_rope: true
@@ -20,6 +20,7 @@ model:
     eps: 1.0e-5
   
 train:
+  model_device: cuda
   precision: bf16
   batch_size: 100
   log_interval: 10
@@ -28,9 +29,9 @@ train:
 optimizer:
   name: AdamW
   AdamW:
-    lr: 3e-4
+    lr: 1e-4
     betas: [0.9, 0.95]
-    weight_decay: 0.1
+    weight_decay: 0.0
     eps: 1e-8
   SGD:
     lr: 1e-3

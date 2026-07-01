@@ -4,7 +4,7 @@ from omegaconf import DictConfig
 import omegaconf
 import torch.optim as optim
 import torch.optim.lr_scheduler as scheduler
-import dev_utils
+from . import dev_utils
 from typing import overload
 import math
 
@@ -16,14 +16,27 @@ def init_tensor(*shape:int, init_cfg:DictConfig|dict):
             return torch.ones(*shape)
         case "normal":
             return torch.randn(*shape) * init_cfg['std']
-        case _:
-            return torch.randn(*shape)
+        case method:
+            raise ValueError(
+                f"<init_tensor()> 전달된 초기화 방식이 잘못되었습니다. : {method}"
+            )
 
 @overload
-def build_optimizer(params, name:str, cfg:DictConfig=None):...
+def build_optimizer(params, name:str, cfg:DictConfig=None) -> optim.Optimizer:
+    '''```
+    "cfg" = {
+        "name":N,
+        N: {
+            "lr": ..., 
+            "weight_decay":..., 
+            ...
+        }
+    }
+    ```'''
+    ...
 @overload
-def build_optimizer(params, name:str, *args, **kwargs):...
-def build_optimizer(params, name:str, *args, cfg:DictConfig=None, **kwargs):
+def build_optimizer(params, name:str, *args, **kwargs) -> optim.Optimizer:...
+def build_optimizer(params, name:str, *args, cfg:DictConfig=None, **kwargs) -> optim.Optimizer:
     dev_utils.type_check(
         ("name", name, str),
         func_name="build_optimizer()"
@@ -65,12 +78,23 @@ def build_optimizer(params, name:str, *args, cfg:DictConfig=None, **kwargs):
         )
     return optimizer_cls(params=params, *args, **kwargs)
 
-optim.SGD()
 @overload
-def build_scheduler(optimizer:optim.Optimizer, cfg:DictConfig):...
+def build_scheduler(optimizer:optim.Optimizer, cfg:DictConfig) -> optim.lr_scheduler.LRScheduler:
+    '''```
+    cfg = {
+        "train": {
+            "max_steps":...
+        },
+        "scheduler": {
+            "warmup_ratio":...,
+            "min_lr_ratio":...
+        }
+    }
+    ```'''
+    ...
 @overload
-def build_scheduler(optimizer:optim.Optimizer, max_steps:int, warmup_ratio:float|int, min_lr_ratio:float|int):...
-def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:float|int=None, min_lr_ratio:float|int=None,*,cfg:DictConfig=None):
+def build_scheduler(optimizer:optim.Optimizer, max_steps:int, warmup_ratio:float|int, min_lr_ratio:float|int) -> optim.lr_scheduler.LRScheduler:...
+def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:float|int=None, min_lr_ratio:float|int=None,*,cfg:DictConfig=None) -> optim.lr_scheduler.LRScheduler:
     if cfg is not None or isinstance(max_steps, DictConfig|dict):
         if cfg is not None:
             dev_utils.type_check(
@@ -135,3 +159,32 @@ def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:
         optimizer,
         lr_lambda=lr_lambda
     )
+
+def load_dtype(name:str)->torch.dtype:
+    dtype_map = {
+        'bf16':torch.bfloat16,
+        'bfloat16':torch.bfloat16,
+
+        'fp16':torch.float16,
+        'float16':torch.float16,
+
+        'fp32':torch.float32,
+        'float32':torch.float32,
+        
+        'half':torch.half,
+        'float':torch.float,
+        'double':torch.double
+    }
+    if name in dtype_map:
+        return dtype_map[name]
+    dtype = getattr(torch, name, default=None)
+    if dtype is None:
+        raise ValueError(
+            f"<load_dtype()> {name}에 해당하는 torch의 dtype이 존재하지 않습니다."
+        )
+    if not isinstance(dtype, torch.dtype):
+        raise ValueError(
+            f"<load_dtype()> {name}은 torch의 dtype 인스턴스가 아닙니다."
+        )
+    
+    return dtype
