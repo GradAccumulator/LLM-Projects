@@ -11,7 +11,7 @@ class Dropout(nn.Module):
     def forward(self, x:Tensor)->Tensor:
         #x.shape == (B, T, D)
         if self.training and self.p > 0:
-            mask = torch.rand_like(x, dtype=torch.float16) > self.p
+            mask = torch.rand_like(x, dtype=torch.bfloat16) > self.p
             x = x*mask/(1-self.p)
         return x
     

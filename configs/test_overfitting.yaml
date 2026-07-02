@@ -1,14 +1,14 @@
 model:
   vocab_size: 100
-  num_layers: 12
-  num_heads: 24
-  embed_dim: 1536
+  num_layers: 24
+  num_heads: 30
+  embed_dim: None
   dropout: 0.0
-  max_seq_len: 256
+  max_seq_len: 1024
   ffn:
     type: swiglu
     activation: silu
-    dim: 6144
+    dim: None
     bias: false
   attention:
     use_rope: true
@@ -21,8 +21,8 @@ model:
   
 train:
   model_device: cuda
-  precision: bf16
-  batch_size: 100
+  precision: fp32
+  batch_size: 2
   log_interval: 10
   max_steps: 1000
 

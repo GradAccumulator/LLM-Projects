@@ -175,9 +175,9 @@ class Transformer(nn.Module):
         vocab_size  : int,
         num_layers  : int=None,
         num_heads   : int=None,
-        embed_dim   : int=None,
-        ffn_dim     : int=None,
-        dropout     : float|int=0.0,
+        embed_dim   : int       =None,
+        ffn_dim     : int       =None,
+        dropout     : float|int =0.0,
         attn_dropout: float|int = None,
         max_seq_len : int       = None,
         norm_eps    : float     = 1e-5,
@@ -256,13 +256,13 @@ class Transformer(nn.Module):
             vocab_size   = model_cfg.vocab_size
             num_layers   = model_cfg.num_layers
             num_heads    = model_cfg.num_heads
-            embed_dim    = model_cfg.embed_dim
+            embed_dim    = model_cfg.embed_dim if model_cfg.embed_dim.lower() != "none" else None
             dropout      = model_cfg.dropout
             max_seq_len  = model_cfg.max_seq_len
             
             ffn          = model_cfg.ffn.type
             activation   = model_cfg.ffn.activation
-            ffn_dim      = model_cfg.ffn.dim
+            ffn_dim      = model_cfg.ffn.dim if model_cfg.ffn.dim.lower() != "none" else None
             ffn_bias     = model_cfg.ffn.bias
             
             use_RoPE     = model_cfg.attention.use_rope
@@ -275,9 +275,9 @@ class Transformer(nn.Module):
 
         dev_utils.type_check(
             ("num_layers"   , num_layers    , int),
-            ("embed_dim"    , embed_dim     , int),
             ("num_heads"    , num_heads     , int),
-            ("ffn_dim"      , ffn_dim       , int),
+            ("embed_dim"    , embed_dim     , int|None),
+            ("ffn_dim"      , ffn_dim       , int|None),
             ("vocab_size"   , vocab_size    , int),
             ("dropout"      , dropout       , float|int),
             ("init_cfg"     , init_cfg      , DictConfig|dict|None),
@@ -302,6 +302,13 @@ class Transformer(nn.Module):
             ("embedding", "transformer_block"),
             "Transformer.__init__()"
         )
+        if embed_dim is None:
+            embed_dim = num_heads * 64
+        if ffn_dim is None:
+            if ffn.lower() == "swiglu":
+                ffn_dim = int(embed_dim * 8/3)
+            else:
+                ffn_dim = embed_dim * 4
 
         self.embedding = Embedding(
             vocab_size,
@@ -342,7 +349,7 @@ class Transformer(nn.Module):
         '''x.shape == (B, T, D)'''
         T = x.size(1)
         device = x.device
-        dtype = x.dtype
+        dtype = torch.get_autocast_dtype(device.type)
         
         if not hasattr(self, 'cached_causal_mask') or self.cached_causal_mask.shape != (T,T) :
             self.register_buffer(

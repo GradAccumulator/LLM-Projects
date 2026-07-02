@@ -12,7 +12,7 @@ def main(cfg:DictConfig):
     print(f"Model parameter: {numel/1e6:.2f}M")
 
     model = Transformer(cfg).to(device, dtype)
-    x = torch.randint(0, cfg.model.vocab_size, (10, 32, cfg.model.max_seq_len), device=device)
+    x = torch.randint(0, cfg.model.vocab_size, (1, cfg.train.batch_size, cfg.model.max_seq_len,), device=device)
     criterion = nn.CrossEntropyLoss()
     optim = nn_utils.build_optimizer(model.parameters(), cfg.optimizer.name, cfg.optimizer)
     scheduler = nn_utils.build_scheduler(optim, cfg=cfg)
@@ -21,14 +21,13 @@ def main(cfg:DictConfig):
     log_interval = cfg.train.log_interval
     breakpoint()
     for i in range(max_epochs):
-        for k in range(10):
-            out = model(x[k]) # (B,T,V)
-            loss = criterion(
-                out.view(-1, cfg.model.vocab_size),
-                x[k].view(-1)
-            )
+        for k in range(len(x)):
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                logits = model(x[k])
+                loss = criterion(logits.view(-1, cfg.model.vocab_size), x[k].view(-1))
             loss.backward()
-        optim.step()
+            optim.step()
+            optim.zero_grad()
         scheduler.step()
         if (i-1)%log_interval == 0:
             print(
