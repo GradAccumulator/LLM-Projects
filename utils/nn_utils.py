@@ -5,8 +5,9 @@ import omegaconf
 import torch.optim as optim
 import torch.optim.lr_scheduler as scheduler
 from . import dev_utils
-from typing import overload
+from typing import overload,Literal
 import math
+from configs import runtime as rt
 
 def init_tensor(*shape:int, init_cfg:DictConfig|dict):
     match init_cfg.method:
@@ -188,3 +189,64 @@ def load_dtype(name:str)->torch.dtype:
         )
     
     return dtype
+
+
+def _quantize(x:Tensor, dtype, method) -> tuple[Literal[False],Tensor] | tuple[Literal[True],Tensor,Tensor]:
+    if "float8" in str(dtype):
+        match method:
+            case 'per-tensor':
+                scale = x.abs().max()
+                quantized = (x/scale).to(dtype=dtype)
+                return True,quantized,scale
+
+    return False,x.to(dtype=dtype)
+
+def _save_for_backward_debug(dtype, method, allowed_quantize_methods):
+    if not isinstance(dtype, torch.dtype):
+        raise ValueError(
+            "<save_for_backward()._quantize()._quantize_debug()> configs/runtime.py의 ACTIVATION_SAVE_DTYPE이 torch.dtype이 아닙니다."
+            f" 현재: {type(dtype)}"
+        )
+
+    if method not in allowed_quantize_methods:
+            raise ValueError(
+                "<save_for_backward()._quantize()._quantize_debug()> configs/runtime.py의 ACTIVATION_QUANTIZE_METHOD 설정이 잘못되었습니다."
+                f" 현재: {rt.ACTIVATION_QUANTIZE_METHOD}, 허용되는 값: {allowed_quantize_methods}"
+            )
+def save_for_backward(ctx, *args):
+    dtype = rt.ACTIVATION_SAVE_DTYPE
+    method = rt.ACTIVATION_QUANTIZE_METHOD
+    allowed_quantize_methods= [
+        'per-tensor',
+    ]
+
+    if rt.DEBUG_CHECKS == True:
+        _save_for_backward_debug(dtype, method, allowed_quantize_methods)
+
+    quantized_tensors = []
+    scales = []
+    k = 0
+    for arg in args:
+        quantized = _quantize(arg, dtype=dtype, method=method)
+        quantized_tensors.append(quantized[1])
+        if quantized[0]:
+            scales.append(quantized[2])
+    ctx.tensors_length = len(quantized_tensors)
+    ctx.save_for_backward(*quantized_tensors, *scales)
+
+def dequantize(ctx, dtype) -> list[Tensor]:
+    quantized = ctx.saved_tensors
+    quantized_tensors = quantized[:ctx.tensors_length]
+    scales = quantized[ctx.tensors_length:]
+
+    if scales != []:
+        dequantized_tensors = []
+        for scale, tensor in zip(quantized_tensors, scales):
+            dequantized_tensors.append(tensor.to(dtype=dtype)*scale)
+    else:
+        dequantized_tensors = [tensor.to(dtype=dtype) for tensor in quantized_tensors]
+    
+    return dequantized_tensors
+
+
+
