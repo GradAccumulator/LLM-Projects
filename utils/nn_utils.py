@@ -1,13 +1,14 @@
+import math
 import torch
-from torch import Tensor
-from omegaconf import DictConfig
 import omegaconf
 import torch.optim as optim
-import torch.optim.lr_scheduler as scheduler
-from . import dev_utils
 from typing import overload,Literal
-import math
-from configs import runtime as rt
+
+from .          import dev_utils
+from torch      import Tensor
+from omegaconf  import DictConfig
+from configs    import runtime as rt
+
 
 def init_tensor(*shape:int, init_cfg:DictConfig|dict):
     match init_cfg.method:
@@ -195,7 +196,7 @@ def _quantize(x:Tensor, dtype, method) -> tuple[Literal[False],Tensor] | tuple[L
     if "float8" in str(dtype):
         match method:
             case 'per-tensor':
-                scale = x.abs().max()
+                scale = (x.abs().amax()/448.0).clamp_min(1e-12)
                 quantized = (x/scale).to(dtype=dtype)
                 return True,quantized,scale
 
@@ -225,7 +226,6 @@ def save_for_backward(ctx, *args):
 
     quantized_tensors = []
     scales = []
-    k = 0
     for arg in args:
         quantized = _quantize(arg, dtype=dtype, method=method)
         quantized_tensors.append(quantized[1])
@@ -234,14 +234,15 @@ def save_for_backward(ctx, *args):
     ctx.tensors_length = len(quantized_tensors)
     ctx.save_for_backward(*quantized_tensors, *scales)
 
-def dequantize(ctx, dtype) -> list[Tensor]:
+def dequantize(ctx) -> list[Tensor]:
+    dtype = torch.get_autocast_gpu_dtype()
     quantized = ctx.saved_tensors
     quantized_tensors = quantized[:ctx.tensors_length]
     scales = quantized[ctx.tensors_length:]
 
-    if scales != []:
+    if scales:
         dequantized_tensors = []
-        for scale, tensor in zip(quantized_tensors, scales):
+        for tensor, scale in zip(quantized_tensors, scales):
             dequantized_tensors.append(tensor.to(dtype=dtype)*scale)
     else:
         dequantized_tensors = [tensor.to(dtype=dtype) for tensor in quantized_tensors]

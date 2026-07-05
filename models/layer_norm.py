@@ -1,8 +1,56 @@
 import torch, torch.nn as nn
-from torch import Tensor
-from omegaconf import DictConfig
-from utils import nn_utils, dev_utils
-from configs import runtime
+from torch      import Tensor
+from omegaconf  import DictConfig
+from torch.amp  import custom_fwd, custom_bwd
+
+from configs    import runtime as rt
+from utils      import nn_utils, dev_utils
+
+class _LayerNormFunction(torch.autograd.Function):
+    @staticmethod
+    @custom_fwd(device_type='cuda')
+    def forward(
+        ctx, 
+        x               :Tensor,
+        gamma           :Tensor,
+        beta            :Tensor,
+        normalized_dims :tuple[int,...], 
+        eps             :float
+    ):
+        mean:Tensor = x.mean(dim=normalized_dims, keepdim=True)
+        v           = x - mean
+        var :Tensor = (v**2).mean(dim=normalized_dims, keepdim=True)
+        inv_std     = (var+eps).rsqrt()
+        
+        x_hat = (x-mean)*inv_std
+        
+        out = x_hat*gamma
+        if beta is not None:
+            out = out + beta
+        
+        nn_utils.save_for_backward(ctx, v, inv_std, gamma, beta, x_hat)
+        ctx.normalized_dims = normalized_dims
+        return out
+    
+    @staticmethod
+    @custom_bwd(device_type='cuda')
+    def backward(ctx, grad_output:Tensor):
+        v,inv_std,gamma,beta,x_hat = nn_utils.dequantize(ctx)
+        sum_dims = tuple(range(-len(v.shape), -len(ctx.normalized_dims)))
+
+        grad_x_hat = grad_output * gamma
+        grad_gamma = (grad_output * x_hat).sum(sum_dims)
+        grad_beta  = None
+        if beta is not None:
+            grad_beta = grad_output.sum(sum_dims)
+        
+        grad_x = inv_std * (
+            grad_x_hat
+            - grad_x_hat.mean(dim=ctx.normalized_dims, keepdim=True)
+            - (inv_std.square() * v)
+            * (v * grad_x_hat).mean(dim=ctx.normalized_dims, keepdim=True)
+        )
+        return grad_x,grad_gamma,grad_beta,None,None
 
 class LayerNorm(nn.Module):
     def __init__(
@@ -24,10 +72,10 @@ class LayerNorm(nn.Module):
         ```'''
         super().__init__()
         dev_utils.type_check(
-            ("init_cfg"     , init_cfg      , DictConfig|dict|None),
             ("bias"         , bias          , bool),
-            ("eps"          , eps           , float)
-            ,func_name="LayerNorm.__init__()"
+            ("eps"          , eps           , float),
+            ("init_cfg"     , init_cfg      , DictConfig|dict|None),
+            func_name="LayerNorm.__init__()"
         )
         for i,value in enumerate(normalized_shape):
             if not isinstance(value, int):
@@ -81,29 +129,26 @@ class LayerNorm(nn.Module):
     
     def forward(self, x:Tensor)->Tensor:
         #x.shape == (B, T, D)
-        if runtime.DEBUG_CHECKS:
+        if rt.DEBUG_CHECKS:
             self.forward_debug(x)
         
-        mean = x.mean(dim=self.normalized_dims, keepdim=True)
-        var = x.var(dim=self.normalized_dims, keepdim=True, unbiased=False)
-        
-        x_hat = (x-mean)/(var+self.eps).sqrt()
-        
-        out =  self.gamma * x_hat
-        if self.use_bias:
-            out = out + self.beta
-        
-        return out
+        return _LayerNormFunction.apply(
+            x,
+            self.gamma,
+            self.beta,
+            self.normalized_dims,
+            self.eps
+        )
     
     @property
-    def gamma(self):return self._gamma
+    def eps(self): return self._eps
     @property
-    def beta(self):return self._beta if self.use_bias else None
+    def beta(self): return self._beta if self.use_bias else None
     @property
-    def eps(self):return self._eps
-    @property
-    def normalized_shape(self):return self.gamma.shape
-    @property
-    def normalized_dims(self):return self._normalized_dims
+    def gamma(self): return self._gamma
     @property
     def use_bias(self): return self._use_bias
+    @property
+    def normalized_dims(self): return self._normalized_dims
+    @property
+    def normalized_shape(self): return self.gamma.shape

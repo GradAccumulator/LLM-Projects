@@ -1,12 +1,14 @@
 import torch, torch.nn as nn, math
-from torch import Tensor
+from torch     import Tensor
 from omegaconf import DictConfig
-from utils import dev_utils
-from .linear import Linear
-from .rope import RoPE
-from .softmax import Softmax
-from .dropout import Dropout
-from configs import runtime
+
+from .rope     import RoPE
+from .matmul   import matmul
+from .linear   import Linear
+from .softmax  import Softmax
+from .dropout  import Dropout
+from utils     import dev_utils
+from configs   import runtime as rt
 
 class MultiHeadAttention(nn.Module):
     def __init__(
@@ -14,10 +16,10 @@ class MultiHeadAttention(nn.Module):
         embed_dim   :int, 
         num_heads   :int, 
         dropout     :float|int, 
-        init_cfg    :DictConfig|dict=None,
-        bias        :bool       =True,
-        use_RoPE    :bool       =True,
-        RoPE_base   :int|float  =None
+        init_cfg    :DictConfig|dict =None,
+        bias        :bool            =False,
+        use_RoPE    :bool            =True,
+        RoPE_base   :int|float       =None
     ):
         '''```
         init_cfg = {
@@ -44,12 +46,12 @@ class MultiHeadAttention(nn.Module):
         dev_utils.type_check(
             ("embed_dim"    , embed_dim     , int),
             ("num_heads"    , num_heads     , int),
-            ("init_cfg"     , init_cfg      , DictConfig|dict|None),
-            ("dropout"      , dropout       , float|int),
             ('bias'         , bias          , bool),
             ('use_RoPE'     , use_RoPE      , bool),
-            ('RoPE_base'    , RoPE_base     , int|float|None)
-            ,func_name="MultiHeadAttention.__init__()"
+            ("dropout"      , dropout       , float|int),
+            ('RoPE_base'    , RoPE_base     , float|int|None),
+            ("init_cfg"     , init_cfg      , DictConfig|dict|None),
+            func_name="MultiHeadAttention.__init__()"
         )
         if embed_dim%num_heads != 0:
             raise ValueError("<MultiHeadAttention.__init__()> embed_dim은 num_heads와 나누어 떨어져야 합니다.")
@@ -57,7 +59,7 @@ class MultiHeadAttention(nn.Module):
             raise ValueError("<MultiHeadAttention.__init__()> dropout p는 반드시 [0, 1) 범위의 실수여야 합니다.")
         
         self._num_heads = num_heads
-        self._d_head = embed_dim//num_heads
+        self._d_head    = embed_dim//num_heads
 
         init_cfg = dev_utils.make_dictconfig(init_cfg,default={
                 "qkv_linear": None,
@@ -72,14 +74,14 @@ class MultiHeadAttention(nn.Module):
         
         self.qkv_linear = Linear(embed_dim, embed_dim*3, init_cfg=init_cfg.qkv_linear, use_bias=bias)
         self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.out_linear, use_bias=bias)
-        self.softmax = Softmax(dim=-1)
-        self.dropout = Dropout(dropout)
+        self.softmax    = Softmax(dim=-1)
+        self.dropout    = Dropout(dropout)
+        self._use_bias  = bias
         self.cached_mask:Tensor
-        self._use_bias = bias
         
         self._use_RoPE = use_RoPE
         if use_RoPE:
-            self.RoPE = RoPE(RoPE_base)
+            self.RoPE  = RoPE(RoPE_base)
             
     def _qkv_projection(self, x:Tensor)->tuple[int, Tensor, Tensor, Tensor]:
         '''return B, Q,K,V'''
@@ -120,10 +122,10 @@ class MultiHeadAttention(nn.Module):
     def _attention(self, scores:Tensor, V:Tensor, B:int, T:int)->Tensor:
         #scores.shape == (B,H,T,T), V.shape == (B,H,T,D)
         weights = self.softmax(scores)
-        drop = self.dropout(weights)
-        out = drop@V
+        drop    = self.dropout(weights)
+        out     = matmul(drop, V)
         #out.shape == (B, H, T, D)
-        out = out.transpose(1, 2).reshape(B,T,self.embed_dim)
+        out     = out.transpose(1, 2).reshape(B,T,self.embed_dim)
         #out.shape == (B, T, D)
         
         return out
@@ -148,15 +150,15 @@ class MultiHeadAttention(nn.Module):
     
     def forward(
         self, 
-        x:Tensor, 
-        mask:Tensor=None, 
-        cached_sin:Tensor=None, 
-        cached_cos:Tensor=None
+        x          :Tensor, 
+        mask       :Tensor =None, 
+        cached_sin :Tensor =None, 
+        cached_cos :Tensor =None
     ) -> Tensor:
         #x.shape == (B, T, D)
         device = x.device
-        T = x.size(1)
-        if runtime.DEBUG_CHECKS:
+        T      = x.size(1)
+        if rt.DEBUG_CHECKS:
             self.forward_debug(x, mask, T)
         
         B, Q,K,V = self._qkv_projection(x)
@@ -165,11 +167,11 @@ class MultiHeadAttention(nn.Module):
         if self.use_RoPE:
             Q,K = self.RoPE(
                 Q, K, 
-                cached_sin  =cached_sin, 
+                cached_sin =cached_sin,
                 cached_cos =cached_cos
             )
         
-        scores = Q@K.transpose(-1, -2)/math.sqrt(self.d_head)
+        scores = matmul(Q, K.transpose(-1, -2))/math.sqrt(self.d_head)
         #scores.shape == (B,H,T,T)
         
         scores = self._apply_mask(scores, T, device, mask=mask)
@@ -182,17 +184,17 @@ class MultiHeadAttention(nn.Module):
         return out
     
     @property
-    def embed_dim(self): return self.qkv_linear.in_features
-    @property
     def d_head(self): return self._d_head
-    @property
-    def num_heads(self): return self._num_heads
     @property
     def use_RoPE(self): return self._use_RoPE
     @property
+    def use_bias(self): return self._use_bias
+    @property
+    def num_heads(self): return self._num_heads
+    @property
     def dropout_p(self): return self.dropout.p
     @property
-    def use_bias(self): return self._use_bias
+    def embed_dim(self): return self.qkv_linear.in_features
     @property
     def RoPE_base(self):
         if self.use_RoPE:

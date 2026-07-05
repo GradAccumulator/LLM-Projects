@@ -1,13 +1,13 @@
 import torch, torch.nn as nn
-from torch import Tensor
-from omegaconf import DictConfig
-from utils import dev_utils
-from .attention import MultiHeadAttention
-from .dropout import Dropout
+from torch       import Tensor
+from typing      import Literal
+from omegaconf   import DictConfig
+
+from .ffn        import FFN
+from .dropout    import Dropout
+from utils       import dev_utils
 from .layer_norm import LayerNorm
-from .ffn import FFN
-from typing import Literal
-from configs import runtime
+from .attention  import MultiHeadAttention
 
 class TransformerBlock(nn.Module):
     def __init__(
@@ -77,20 +77,20 @@ class TransformerBlock(nn.Module):
         ```'''
         super().__init__()
         dev_utils.type_check(
+            ("activation"   , activation    , str),
             ("embed_dim"    , embed_dim     , int),
             ("num_heads"    , num_heads     , int),
             ("ffn_dim"      , ffn_dim       , int),
-            ("dropout"      , dropout       , float|int),
-            ("init_cfg"     , init_cfg      , DictConfig|dict|None),
-            ("attn_dropout" , attn_dropout  , float|None|int),
-            ("norm_eps"     , norm_eps      , float),
             ("ffn_bias"     , ffn_bias      , bool),
             ("attn_bias"    , attn_bias     , bool),
             ("norm_bias"    , norm_bias     , bool),
             ("use_RoPE"     , use_RoPE      , bool),
-            ("RoPE_base"    , RoPE_base     , int|float|None),
-            ("activation"   , activation    , str)
-            ,func_name="TransformerBlock.__init__()"
+            ("norm_eps"     , norm_eps      , float),
+            ("dropout"      , dropout       , float|int),
+            ("RoPE_base"    , RoPE_base     , float|int|None),
+            ("attn_dropout" , attn_dropout  , float|int|None),
+            ("init_cfg"     , init_cfg      , DictConfig|dict|None),
+            func_name="TransformerBlock.__init__()"
         )
         init_cfg = dev_utils.make_dictconfig(init_cfg, default={
             "layer_norm":None,
@@ -159,11 +159,15 @@ class TransformerBlock(nn.Module):
         return x
 
     @property
-    def embed_dim(self): return self.ln1.normalized_shape[-1]
-    @property
-    def num_heads(self): return self.attention.num_heads
+    def act_fn(self): return self.ffn.act_fn
     @property
     def ffn_dim(self):return self.ffn.ffn_dim
+    @property
+    def dropout(self): return self._dropout
+    @property
+    def norm_eps(self): return self.ln1.eps
+    @property
+    def ffn_type(self): return self.ffn.ffn_type
     @property
     def use_bias(self): return self.attention.use_bias and self.ffn.use_bias
     @property
@@ -171,18 +175,14 @@ class TransformerBlock(nn.Module):
     @property
     def RoPE_base(self): return self.attention.RoPE_base
     @property
-    def act_fn(self): return self.ffn.act_fn
+    def embed_dim(self): return self.ln1.normalized_shape[-1]
     @property
-    def activation_name(self): return self.ffn.activation_name
+    def num_heads(self): return self.attention.num_heads
     @property
-    def ffn_type(self): return self.ffn.ffn_type
+    def dropout_p(self): return self._dropout.p
     @property
     def attn_dropout(self): return self.attention.dropout
     @property
     def attn_dropout_p(self): return self.attention.dropout_p
     @property
-    def dropout(self): return self._dropout
-    @property
-    def dropout_p(self): return self._dropout.p
-    @property
-    def norm_eps(self): return self.ln1.eps
+    def activation_name(self): return self.ffn.activation_name

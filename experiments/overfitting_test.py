@@ -12,14 +12,13 @@ def main(cfg:DictConfig):
     print(f"Model parameter: {numel/1e6:.2f}M")
 
     model = Transformer(cfg).to(device, dtype)
-    x = torch.randint(0, cfg.model.vocab_size, (1, cfg.train.batch_size, cfg.model.max_seq_len,), device=device)
+    x = torch.randint(0, cfg.model.vocab_size, (10, cfg.train.batch_size, cfg.model.max_seq_len,), device=device)
     criterion = nn.CrossEntropyLoss()
     optim = nn_utils.build_optimizer(model.parameters(), cfg.optimizer.name, cfg.optimizer)
     scheduler = nn_utils.build_scheduler(optim, cfg=cfg)
 
     max_epochs = cfg.train.max_steps
     log_interval = cfg.train.log_interval
-    breakpoint()
     for i in range(max_epochs):
         for k in range(len(x)):
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):

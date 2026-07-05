@@ -1,38 +1,38 @@
 model:
-  vocab_size: 100
-  num_layers: 24
-  num_heads: 30
-  embed_dim: None
-  dropout: 0.0
+  vocab_size : 32000
+  num_layers : 24
+  num_heads  : 30
+  embed_dim  : None
+  dropout    : 0.0
   max_seq_len: 1024
   ffn:
     type: swiglu
     activation: silu
-    dim: None
+    dim : None
     bias: false
   attention:
     use_rope: true
-    dropout: 0.0
+    dropout : 0.0
     rope:
       base: 10000
   layernorm:
     bias: true
-    eps: 1.0e-5
+    eps : 1.0e-5
   
 train:
   model_device: cuda
-  precision: fp32
-  batch_size: 2
+  precision   : bf16
+  batch_size  : 6
   log_interval: 10
-  max_steps: 1000
+  max_steps   : 1000
 
 optimizer:
   name: AdamW
   AdamW:
-    lr: 1e-4
+    lr   : 1e-4
     betas: [0.9, 0.95]
+    eps  : 1e-8
     weight_decay: 0.0
-    eps: 1e-8
   SGD:
     lr: 1e-3
     weight_decay: 0.0
@@ -54,7 +54,7 @@ loss:
 init:
   embedding:
     method: normal
-    std: 0.02
+    std   : 0.02
   
   
   transformer_block:
@@ -68,14 +68,14 @@ init:
       qkv_linear:
         weight:
           method: normal
-          std: 0.02
+          std   : 0.02
         bias:
           method: zeros
 
       out_linear:
         weight:
           method: normal
-          std: 0.02
+          std   : 0.02
         bias:
           method: zeros
         
@@ -83,13 +83,13 @@ init:
       linear1:
         weight:
           method: normal
-          std: 0.02
+          std   : 0.02
         bias:
           method: zeros
         
       linear2:
         weight:
           method: normal
-          std: 0.02
+          std   : 0.02
         bias:
           method: zeros

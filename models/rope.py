@@ -1,16 +1,49 @@
 import torch, torch.nn as nn
-from torch import Tensor
-from utils import dev_utils
-from configs import runtime
+from torch      import Tensor
+from torch.amp  import custom_fwd, custom_bwd
+
+from configs    import runtime as rt
+from utils      import dev_utils, nn_utils
+
+class _RotateFunction(torch.autograd.Function):
+    @staticmethod
+    @custom_fwd(device_type='cuda')
+    def forward(ctx, x:Tensor, sin:Tensor, cos:Tensor) -> Tensor:
+        nn_utils.save_for_backward(ctx, sin, cos)
+        x_even, x_odd = x[...,0::2], x[...,1::2]
+        
+        x_rot_even = x_even * cos - x_odd * sin
+        x_rot_odd  = x_even * sin + x_odd * cos
+        
+        out = torch.empty_like(x)
+        out[...,0::2] = x_rot_even
+        out[...,1::2] = x_rot_odd
+        
+        return out
+    
+    @staticmethod
+    @custom_bwd(device_type='cuda')
+    def backward(ctx, grad_output:Tensor):
+        sin,cos = nn_utils.dequantize(ctx)
+        grad_even, grad_odd = grad_output[...,0::2], grad_output[...,1::2]
+
+        grad_x_even = grad_even*cos + grad_odd*sin
+        grad_x_odd  = grad_odd*cos - grad_even*sin
+
+        grad_x = torch.empty_like(grad_output)
+        grad_x[...,0::2] = grad_x_even
+        grad_x[...,1::2] = grad_x_odd
+        
+        return grad_x,None,None
 
 class RoPE(nn.Module):
-    def __init__(self, base:int|float=None):
+    def __init__(self, base:float|int=None):
         super().__init__()
         if base is None:
             base = 10000
         dev_utils.type_check(
-            ("base", base, int|float)
-            ,func_name="RoPE.__init__()"
+            ("base", base, float|int),
+            func_name="RoPE.__init__()"
         )
         if base <= 0:
             raise ValueError("<RoPE.__init__()> RoPE의 base는 양수여야 합니다.")
@@ -55,7 +88,7 @@ class RoPE(nn.Module):
             if cached_sin_cos_is_given:
                 raise ValueError(
                     "RoPE에 주어진 cached_sin, cached_cos의 shape, device, dtype이 입력 텐서와 맞지 않습니다."
-                    f"\n예상 shape={tuple(cached_sin.shape)}, device={cached_sin.device}, dtype={cached_sin.dtype}"
+                    f"\n예상 shape=(..., {cached_sin.size(0)}, {cached_sin.size(1)}), device={cached_sin.device}, dtype={cached_sin.dtype}"
                     f"\n현재 shape=(..., {T}, {D//2}), device={device}, dtype={dtype}"
                 )
 
@@ -88,16 +121,7 @@ class RoPE(nn.Module):
         
     
     def _rotate(self, x:Tensor, sin:Tensor, cos:Tensor) -> Tensor:
-        x_odd, x_even = x[...,1::2], x[...,0::2]
-        
-        x_rot_even = x_even * cos - x_odd * sin
-        x_rot_odd  = x_even * sin + x_odd * cos
-        
-        out = torch.empty_like(x)
-        out[...,1::2] = x_rot_odd
-        out[...,0::2] = x_rot_even
-        
-        return out
+        return _RotateFunction.apply(x, sin, cos)
     
     def forward(self, Q:Tensor, K:Tensor, cached_sin:Tensor=None, cached_cos:Tensor=None)->tuple[Tensor, Tensor]:
         #Q, K.shape == (B, H, T, D)
@@ -107,7 +131,7 @@ class RoPE(nn.Module):
         if D%2!=0:
             raise ValueError(f"RoPE의 입력으로 주어지는 Q 행렬의 마지막 차원의 크기는 짝수여야 합니다. 현재: {D}")
         
-        if runtime.DEBUG_CHECKS:
+        if rt.DEBUG_CHECKS:
             sin,cos = self._compute_sin_cos_safe(
                 T, D, 
                 Q.device, 

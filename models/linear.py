@@ -1,11 +1,47 @@
 import torch, torch.nn as nn
-from torch import Tensor
-from omegaconf import DictConfig
-from utils import nn_utils, dev_utils
-from configs import runtime
+from torch      import Tensor
+from omegaconf  import DictConfig
+from torch.amp  import custom_fwd, custom_bwd
+
+from configs    import runtime as rt
+from utils      import nn_utils, dev_utils
+
+class _LinearFunction(torch.autograd.Function):
+    @staticmethod
+    @custom_fwd(device_type="cuda")
+    def forward(ctx, x:Tensor, weight:Tensor, bias:Tensor|None)->Tensor:
+        nn_utils.save_for_backward(ctx, x, weight)
+        ctx.use_bias = bias is not None
+
+        out = x@weight.T
+        if ctx.use_bias:
+            out = out + bias
+        return out
+    
+    @staticmethod
+    @custom_bwd(device_type="cuda")
+    def backward(ctx, grad_output:Tensor)->tuple[Tensor, Tensor, Tensor|None]:
+        x, weight = nn_utils.dequantize(ctx)
+        #x.shape = (B,T,in), grad_output.shape = (B,T,out)
+        #weight.shape = (out,in)
+        
+        grad_x = grad_output @ weight
+
+        grad_weight = grad_output.view(-1, weight.size(0)).T @ x.view(-1, weight.size(1))
+
+        grad_bias = grad_output.view(-1, weight.size(0)).sum(dim=0) if ctx.use_bias else None
+
+        return grad_x, grad_weight, grad_bias
 
 class Linear(nn.Module):
-    def __init__(self, in_features:int, out_features:int,*, init_cfg:DictConfig|dict=None, use_bias:bool=True):
+    def __init__(
+        self, 
+        in_features     :int, 
+        out_features    :int,
+        *, 
+        use_bias        :bool =True,
+        init_cfg        :DictConfig|dict =None, 
+    ):
         '''```
         init_cfg = {
             "weight": {
@@ -21,11 +57,11 @@ class Linear(nn.Module):
         dev_utils.type_check(
             ("in_features"  , in_features   , int),
             ("out_features" , out_features  , int),
+            ("use_bias"     , use_bias      , bool),
             ("init_cfg"     , init_cfg      , DictConfig|dict|None),
-            ("use_bias"     , use_bias      , bool)
-            ,func_name="Linear.__init__()"
+            func_name="Linear.__init__()"
         )
-        if in_features <= 0:
+        if in_features  <= 0:
             raise ValueError("<Linear.__init__()> in_features는 양의 정수여야 합니다.")
         if out_features <= 0:
             raise ValueError("<Linear.__init__()> out_features는 양의 정수여야 합니다.")
@@ -63,26 +99,19 @@ class Linear(nn.Module):
             )
     
     def forward(self, x:Tensor) -> Tensor:
-        if runtime.DEBUG_CHECKS:
+        if rt.DEBUG_CHECKS:
             self.forward_debug(x)
         
-        out = x@self.weight.T
-        if self.use_bias:
-            if not hasattr(self, "_bias"):
-                raise ValueError(
-                    "<Linear.forward()> use_bias=True로 설정되어있지만 bias 텐서가 존재하지 않습니다."
-                )
-            out = out + self.bias
-        return out
+        return _LinearFunction.apply(x, self.weight, self.bias)
     
+    @property
+    def bias(self): return self._bias if self.use_bias else None
+    @property
+    def weight(self): return self._weight
+    @property
+    def use_bias(self): return self._use_bias
     @property
     def in_features(self): return self.weight.size(1)
     @property
     def out_features(self): return self.weight.size(0)
-    @property
-    def use_bias(self): return self._use_bias
-    @property
-    def weight(self): return self._weight
-    @property
-    def bias(self): return self._bias if self.use_bias else None
     

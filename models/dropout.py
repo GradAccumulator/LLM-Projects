@@ -1,19 +1,42 @@
 import torch, torch.nn as nn
-from torch import Tensor
+from torch.amp import custom_fwd, custom_bwd
+
+from torch     import Tensor
+from utils     import nn_utils, dev_utils
+
+class _DropoutFunction(torch.autograd.Function):
+    @staticmethod
+    @custom_fwd(device_type="cuda")
+    def forward(ctx, x:Tensor, p:int|float)->Tensor:
+        ctx.p = p
+        if ctx.p == 0:
+            return x
+        mask = torch.rand_like(x, dtype=torch.bfloat16) > ctx.p
+        mask /= (1-ctx.p)
+        nn_utils.save_for_backward(ctx, mask)
+        return x*mask
+    
+    @staticmethod
+    @custom_bwd(device_type="cuda")
+    def backward(ctx, grad_output:Tensor)->tuple[Tensor, None]:
+        if ctx.p == 0:
+            return grad_output, None
+        mask, = nn_utils.dequantize(ctx)
+        return grad_output*mask, None
 
 class Dropout(nn.Module):
-    def __init__(self, p:float):
+    def __init__(self, p:int|float):
         super().__init__()
+        dev_utils.type_check(
+            ("p", p, int|float),
+            func_name="Dropout.__init__()"
+        )
         if not 0<=p<1:
             raise ValueError("<Dropout.__init__()> dropout p는 반드시 [0, 1) 범위의 실수여야 합니다.")
         self._p = p
         
     def forward(self, x:Tensor)->Tensor:
-        #x.shape == (B, T, D)
-        if self.training and self.p > 0:
-            mask = torch.rand_like(x, dtype=torch.bfloat16) > self.p
-            x = x*mask/(1-self.p)
-        return x
+        return _DropoutFunction.apply(x, self.p*(not self.training))
     
     @property
-    def p(self):return self._p
+    def p(self): return self._p

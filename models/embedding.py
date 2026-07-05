@@ -1,10 +1,16 @@
 import torch, torch.nn as nn
-from torch import Tensor
+from torch     import Tensor
 from omegaconf import DictConfig
-from utils import nn_utils, dev_utils
+
+from utils     import nn_utils, dev_utils
 
 class Embedding(nn.Module):
-    def __init__(self, num_embeddings:int, embed_dim:int, init_cfg:DictConfig|dict=None):
+    def __init__(
+        self, 
+        num_embeddings  :int, 
+        embed_dim       :int, 
+        init_cfg        :DictConfig|dict=None
+    ):
         '''```
         init_cfg = {
             "method":...
@@ -14,7 +20,7 @@ class Embedding(nn.Module):
         super().__init__()
         dev_utils.type_check(
             ('num_embeddings', num_embeddings, int),
-            ('embed_dim' , embed_dim , int),
+            ('embed_dim'     , embed_dim     , int),
             ('init_cfg'      , init_cfg      , DictConfig|dict|None)
             ,func_name="Embedding.__init__()"
         )
@@ -43,8 +49,8 @@ class Embedding(nn.Module):
         return self.weight[x.long()]
     
     @property
-    def num_embeddings(self): return self.weight.size(0)
+    def weight(self): return self._weight
     @property
     def embed_dim(self): return self.weight.size(1)
     @property
-    def weight(self): return self._weight
+    def num_embeddings(self): return self.weight.size(0)
