@@ -1,7 +1,9 @@
+import time
 import torch
 from typing     import Any
 from torch      import Tensor
 from omegaconf  import OmegaConf, DictConfig
+from contextlib import contextmanager
 
 def type_check(*values:tuple[str, Any, type], func_name, strict=True):
     for value in values:
@@ -29,3 +31,12 @@ def check_dictconfig(cfg:DictConfig|dict, required_keys:list, func_name:str):
     missing = [key for key in required_keys if OmegaConf.select(cfg, key) is None]
     if missing:
         raise ValueError(f"<{func_name}> cfg에서 누락된 key: {missing}")
+
+@contextmanager
+def timer(name:str):
+    start = time.time()
+    yield
+    헬로키티 = time.time() - start
+    print(
+        f"[{name}] 걸린 시간: {헬로키티}s"
+    )
