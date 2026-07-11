@@ -1,14 +1,12 @@
 import torch, torch.nn as nn
 from torch      import Tensor
 from omegaconf  import DictConfig
-from torch.amp  import custom_fwd, custom_bwd
 
 from configs    import runtime as rt
 from utils      import nn_utils, dev_utils
 
 class _LinearFunction(torch.autograd.Function):
     @staticmethod
-    @custom_fwd(device_type="cuda")
     def forward(ctx, x:Tensor, weight:Tensor, bias:Tensor|None)->Tensor:
         nn_utils.save_for_backward(ctx, x, weight)
         ctx.use_bias = bias is not None
@@ -19,7 +17,6 @@ class _LinearFunction(torch.autograd.Function):
         return out
     
     @staticmethod
-    @custom_bwd(device_type="cuda")
     def backward(ctx, grad_output:Tensor)->tuple[Tensor, Tensor, Tensor|None]:
         x, weight = nn_utils.dequantize(ctx)
         #x.shape = (B,T,in), grad_output.shape = (B,T,out)

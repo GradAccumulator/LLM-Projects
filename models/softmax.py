@@ -1,12 +1,10 @@
 import torch, torch.nn as nn
 from torch      import Tensor
-from torch.amp  import custom_fwd, custom_bwd
 
 from utils      import dev_utils,nn_utils
 
 class _SoftmaxFunction(torch.autograd.Function):
     @staticmethod
-    @custom_fwd(device_type='cuda')
     def forward(
         ctx, 
         x:Tensor, 
@@ -23,11 +21,10 @@ class _SoftmaxFunction(torch.autograd.Function):
         return y
     
     @staticmethod
-    @custom_bwd(device_type='cuda')
     def backward(ctx, grad_output:Tensor):
         y, = nn_utils.dequantize(ctx) 
         out = (y * (grad_output 
-            - (grad_output.unsqueeze(-2)@y.unsqueeze(-1)).squeeze(-1)
+            - (grad_output*y).sum(dim=ctx.dim, keepdim=True)
             )
         )
         if ctx.temperature != 1:

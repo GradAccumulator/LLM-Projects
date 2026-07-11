@@ -1,12 +1,9 @@
 import torch, torch.nn as nn
-from torch.amp import custom_fwd, custom_bwd
-
 from torch     import Tensor
 from utils     import nn_utils, dev_utils
 
 class _DropoutFunction(torch.autograd.Function):
     @staticmethod
-    @custom_fwd(device_type="cuda")
     def forward(ctx, x:Tensor, p:int|float)->Tensor:
         ctx.p = p
         if ctx.p == 0:
@@ -17,7 +14,6 @@ class _DropoutFunction(torch.autograd.Function):
         return x*mask
     
     @staticmethod
-    @custom_bwd(device_type="cuda")
     def backward(ctx, grad_output:Tensor)->tuple[Tensor, None]:
         if ctx.p == 0:
             return grad_output, None

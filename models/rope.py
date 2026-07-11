@@ -1,13 +1,11 @@
 import torch, torch.nn as nn
 from torch      import Tensor
-from torch.amp  import custom_fwd, custom_bwd
 
 from configs    import runtime as rt
 from utils      import dev_utils, nn_utils
 
 class _RotateFunction(torch.autograd.Function):
     @staticmethod
-    @custom_fwd(device_type='cuda')
     def forward(ctx, x:Tensor, sin:Tensor, cos:Tensor) -> Tensor:
         nn_utils.save_for_backward(ctx, sin, cos)
         x_even, x_odd = x[...,0::2], x[...,1::2]
@@ -22,7 +20,6 @@ class _RotateFunction(torch.autograd.Function):
         return out
     
     @staticmethod
-    @custom_bwd(device_type='cuda')
     def backward(ctx, grad_output:Tensor):
         sin,cos = nn_utils.dequantize(ctx)
         grad_even, grad_odd = grad_output[...,0::2], grad_output[...,1::2]
