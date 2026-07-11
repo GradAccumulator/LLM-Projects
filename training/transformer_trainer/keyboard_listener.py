@@ -12,7 +12,6 @@ class KeyboardListener:
         if command_type is not None:
             self.trainer.submit_command(command_type())
         
-    
     def start(self):
         return self.listener.start()
     

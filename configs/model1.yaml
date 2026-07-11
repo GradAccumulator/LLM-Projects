@@ -28,7 +28,7 @@ train:
   log_interval: 10
   max_steps   : 1000
   validation_interval: 1000
-  grad_accumulation: 5
+  validation: true
 
 optimizer:
   name: AdamW
@@ -41,6 +41,7 @@ optimizer:
     lr: 1e-3
     weight_decay: 0.0
   grad_clip_norm: 1.0
+  grad_accumulation: 5
 
 scheduler:
   name: cosine
