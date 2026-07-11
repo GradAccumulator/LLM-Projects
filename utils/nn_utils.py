@@ -249,5 +249,47 @@ def dequantize(ctx) -> list[Tensor]:
     
     return dequantized_tensors
 
+@overload
+def build_loss_fn(name:str, cfg:DictConfig|dict):
+    '''
+    cfg = {
+        "name": N,
+        N : ...
+    }
+    '''
+    ...
+@overload
+def build_loss_fn(name, *args, **kwargs):...
+def build_loss_fn(name, *args, cfg:DictConfig|dict=None, **kwargs):
+    func_name = "build_loss_fn()"
 
+    dev_utils.type_check(
+        ("name", name, str),
+        func_name=func_name
+    )
+    loss_fn_cls = torch.nn.__dict__.get(name, None)
+    if loss_fn_cls is not None:
+        if not (
+            isinstance(loss_fn_cls,type) 
+            and issubclass(loss_fn_cls, torch.nn.Module)
+            and 'loss' in name.lower()
+        ):
+            raise ValueError(
+                f"<{func_name}> name={name}은 torch.nn의 손실함수 클래스가 아닙니다."
+            )
+    else:
+        raise ValueError(
+            f"<{func_name}> torch.nn에 name= {name}에 해당하는 객체/클래스/모듈이 존재하지 않습니다."
+        )
+    
 
+    if cfg is not None:
+        dev_utils.type_check(
+            ("cfg", cfg, DictConfig|dict),
+            func_name=func_name
+        )
+        _kwargs = kwargs
+        kwargs = cfg.get(name, None)
+        kwargs.update(_kwargs)
+        
+    return loss_fn_cls(*args, **kwargs)
