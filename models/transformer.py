@@ -271,6 +271,7 @@ class Transformer(nn.Module):
             use_RoPE     = model_cfg.attention.use_rope
             attn_dropout = model_cfg.attention.dropout
             RoPE_base    = model_cfg.attention.rope.base
+            attn_bias    = model_cfg.attention.bias
 
             norm_eps     = model_cfg.layernorm.eps
             norm_bias    = model_cfg.layernorm.bias
