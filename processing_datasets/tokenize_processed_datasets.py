@@ -2,10 +2,8 @@ from tokenizer import Tokenizer
 from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
+from utils.dev_utils import num_to_str,M
 
-B = 1_000_000_000
-M = 1_000_000
-K = 1_000
 CHUNK_SIZE = 500*M
 
 BASE_DIR = Path(
@@ -18,14 +16,6 @@ DATASET_PATH = BASE_DIR/"processed"/(DATASET_TYPE+".txt")
 
 tokenizer = Tokenizer(model_name="32k_fineweb2_korean")
 
-def num_to_str(num):
-    if num>=B:
-        return f"{num/B:.2f}B"
-    elif num>=M:
-        return f"{num/M:.2f}M"
-    elif num>=K:
-        return f"{num/K:.2f}K"
-    return f"{num}"
 
 def save_one_chunk(file_idx:int, chunk:NDArray[np.uint16]):
     file_name = f"{file_idx:04d}.bin"

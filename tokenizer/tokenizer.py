@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 class Tokenizer:
-    def __init__(self, model_name:str, num_threads:int=os.cpu_count()-1):
+    def __init__(self, model_name:str, num_threads:int=os.cpu_count()//2):
         self._processor = spm.SentencePieceProcessor(
             model_file=fr"tokenizer\{model_name}\{model_name}.model"
         )

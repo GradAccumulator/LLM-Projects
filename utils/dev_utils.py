@@ -40,3 +40,16 @@ def timer(name:str):
     print(
         f"[{name}] 걸린 시간: {헬로키티}s"
     )
+
+
+B = 1_000_000_000
+M = 1_000_000
+K = 1_000
+def num_to_str(num):
+    if num>=B:
+        return f"{num/B:.2f}B"
+    elif num>=M:
+        return f"{num/M:.2f}M"
+    elif num>=K:
+        return f"{num/K:.2f}K"
+    return f"{num}"
