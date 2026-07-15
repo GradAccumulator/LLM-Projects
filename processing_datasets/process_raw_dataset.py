@@ -8,7 +8,7 @@ BASE_DIR = Path(
     r'\datasets\llm\fineweb2_korean'
 )
 
-DATASET_TYPE = 'test'
+DATASET_TYPE = 'train'
 TRAIN_FILE_GROUPS = [(0,1,2), (3,4)]
 TEST_FILE_GROUPS = [(0,)]
 
@@ -22,7 +22,7 @@ def process_file(args:tuple[Path, Path]):
     with open(output_path, 'w', encoding='utf-8') as f:
         for text in texts:
             f.write(text)
-            f.write("<eos>")
+            f.write('<eos>')
 
 def merge_files(output_paths:list[Path], destination_path:Path):
     with destination_path.open("a", encoding="utf-8") as destination:
@@ -45,7 +45,7 @@ def main():
 
     save_path.write_text("", encoding="utf-8")
 
-    for i in range(1):
+    for i in range(5):
         for file_group in file_groups:
             file_names = [f"00{i}_0000{j}" for j in file_group]
 
@@ -64,8 +64,8 @@ def main():
 
             output_paths = [output_path for _,output_path in tasks]
 
-            print("[저장] 추출된 데이터셋 저장")
             merge_files(output_paths, save_path)
+            print("[저장] 추출된 데이터셋 저장")
 
             for output_path in output_paths:
                 output_path.unlink()
