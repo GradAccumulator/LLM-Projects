@@ -1,0 +1,59 @@
+import torch
+import torch.utils.data as data
+from pathlib import Path
+
+from utils import dev_utils
+
+class LLMDataset(data.Dataset):
+    def __init__(
+        self,
+        seq_len:int,
+        total_tokens:int,
+        datasets_dir:str|Path,
+        dataset_name:str,
+        dataset_type:str='train',
+        bin_dtype:torch.dtype=torch.uint16
+    ):
+        dev_utils.type_check(
+            ("seq_len", seq_len, int),
+            ("total_tokens", total_tokens, int),
+            ("datasets_dir", datasets_dir, str|Path),
+            ("dataset_name", dataset_name, str),
+            ("dataset_type", dataset_type, str),
+            ("bin_dtype", bin_dtype, torch.dtype),
+            func_name="LLMDataset.__init__()"
+        )
+        self._total_tokens = total_tokens
+        self._seq_len = seq_len
+
+        if not isinstance(datasets_dir, Path):
+            datasets_dir = Path(datasets_dir)
+        self._dataset_path = datasets_dir/'llm'/dataset_name/"tokenized"/(dataset_type+".bin")
+        self._bin_dtype = bin_dtype
+        element_size = torch.empty((), dtype=bin_dtype).element_size()
+        self._num_tokens = self.dataset_path.stat().st_size // element_size
+        self._tokens = torch.from_file(
+            str(self.dataset_path),
+            shared=False,
+            size=self._num_tokens,
+            dtype=self._bin_dtype
+        )
+    
+    def __getitem__(self, index):
+        start = index*self.seq_len
+        end = start+self.seq_len+1
+        dataset = self._tokens[start:end]
+        x,y = dataset[:-1], dataset[1:]
+        return x,y
+
+    def __len__(self):
+        return (self.total_tokens - 1) // self.seq_len
+
+    @property
+    def total_tokens(self): return self._total_tokens
+    @property
+    def num_tokens(self): return self._num_tokens
+    @property
+    def seq_len(self): return self._seq_len
+    @property
+    def dataset_path(self): return self._dataset_path
