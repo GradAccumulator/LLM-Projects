@@ -53,3 +53,13 @@ def num_to_str(num):
     elif num>=K:
         return f"{num/K:.2f}K"
     return f"{num}"
+def str_to_num(num_str:str):
+    match num_str[-1]:
+        case "B":
+            return float(num_str[:-1])*B
+        case "M":
+            return float(num_str[:-1])*M
+        case "K":
+            return float(num_str[:-1])*K
+        case _:
+            return float(num_str)

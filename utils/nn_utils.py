@@ -293,3 +293,16 @@ def build_loss_fn(name, *args, cfg:DictConfig|dict=None, **kwargs):
         kwargs.update(_kwargs)
         
     return loss_fn_cls(*args, **kwargs)
+
+def resolve_llm_cfg(cfg:DictConfig):
+    if isinstance(cfg.dataset.total_tokens, str):
+        cfg.dataset.total_tokens = total_tokens = dev_utils.str_to_num(cfg.dataset.total_tokens)
+    if cfg.train.validation == None:
+        cfg.train.validation = cfg.train.validation_interval>0
+    if cfg.train.max_steps == 0 or cfg.train.max_steps is None:
+        cfg.max_steps = total_tokens//(cfg.model.max_seq_len*cfg.train.batch_size)
+    if total_tokens%(cfg.model.max_seq_len*cfg.train.batch_size) != 0:
+        print(f"현재 total_tokens= {dev_utils.num_to_str(total_tokens)}가 seq_len*batch_size= {cfg.model.seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다.")
+        total_tokens = (total_tokens//(cfg.model.max_seq_len*cfg.train.batch_size))*(cfg.model.max_seq_len*cfg.train.batch_size)
+        print(f"total_tokens를 {total_tokens}로 재설정합니다.")
+        cfg.dataset.total_tokens = total_tokens
