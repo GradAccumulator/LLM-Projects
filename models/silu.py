@@ -15,7 +15,7 @@ class _SiLUFunction(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output:Tensor):
-        x,sig = nn_utils.dequantize(ctx)
+        x,sig = nn_utils.dequantize(ctx, grad_output.dtype)
         
         return grad_output * ((x+1) * sig - x * (sig**2))
     

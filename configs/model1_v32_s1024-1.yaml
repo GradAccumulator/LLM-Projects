@@ -2,13 +2,13 @@ model:
   vocab_size : 32000
   num_layers : 24
   num_heads  : 30
-  embed_dim  : None
+  embed_dim  : null
   dropout    : 0.0
   max_seq_len: 1024
   ffn:
     type: swiglu
     activation: silu
-    dim : None
+    dim : null
     bias: false
   attention:
     use_rope: true
@@ -26,9 +26,14 @@ train:
   precision   : bf16
   batch_size  : 6
   log_interval: 10
-  max_steps   : 1000
+  max_steps   : null
   validation_interval: 1000
   validation: true
+
+dataset:
+  name: fineweb2_korean
+  total_tokens: 30B
+  bin_dtype: uint16
 
 optimizer:
   name: AdamW
@@ -49,9 +54,9 @@ scheduler:
   min_lr_ratio: 0.1
 
 loss:
-  name: cross_entropy
-  cross_entropy:
-    ignore_idx: -1
+  name: CrossEntropyLoss
+  CrossEntropyLoss:
+    ignore_index: 0
 
 
 init:

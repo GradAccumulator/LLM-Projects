@@ -10,6 +10,7 @@ class _DropoutFunction(torch.autograd.Function):
             return x
         mask = torch.rand_like(x, dtype=torch.bfloat16) > ctx.p
         mask /= (1-ctx.p)
+        mask = mask.to(x.dtype)
         nn_utils.save_for_backward(ctx, mask)
         return x*mask
     
@@ -17,7 +18,7 @@ class _DropoutFunction(torch.autograd.Function):
     def backward(ctx, grad_output:Tensor)->tuple[Tensor, None]:
         if ctx.p == 0:
             return grad_output, None
-        mask, = nn_utils.dequantize(ctx)
+        mask, = nn_utils.dequantize(ctx, grad_output.dtype)
         return grad_output*mask, None
 
 class Dropout(nn.Module):
@@ -32,7 +33,7 @@ class Dropout(nn.Module):
         self._p = p
         
     def forward(self, x:Tensor)->Tensor:
-        return _DropoutFunction.apply(x, self.p*(not self.training))
+        return _DropoutFunction.apply(x, self.p*self.training)
     
     @property
     def p(self): return self._p

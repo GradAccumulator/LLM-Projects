@@ -10,28 +10,32 @@ from models             import Transformer
 from .keyboard_listener import KeyboardListener
 from utils              import dev_utils,nn_utils
 from .commands          import TrainLoopResult, TrainingCommand
+from typing import TYPE_CHECKING
+from tokenizer import Tokenizer
 
 class TransformerTrainer:
     @overload
     def __init__(
         self,
-        model     :Transformer,
-        dataset   :tuple[data.DataLoader,data.DataLoader],
-        optimizer :torch.optim.Optimizer,
-        scheduler :torch.optim.lr_scheduler.LRScheduler,
-        loss_fn   :nn.Module,
-        cfg       :DictConfig|dict
+        model       :Transformer,
+        dataloaders :tuple[data.DataLoader,data.DataLoader]|list[data.DataLoader,data.DataLoader],
+        optimizer   :torch.optim.Optimizer,
+        scheduler   :torch.optim.lr_scheduler.LRScheduler,
+        loss_fn     :nn.Module,
+        cfg         :DictConfig|dict,
+        tokenizer   :Tokenizer = None,
     ):...
     @overload
     def __init__(
         self,
         model               :Transformer,
-        dataset             :tuple[data.DataLoader,data.DataLoader],
+        dataloaders         :tuple[data.DataLoader,data.DataLoader]|list[data.DataLoader,data.DataLoader],
         optimizer           :torch.optim.Optimizer,
         scheduler           :torch.optim.lr_scheduler.LRScheduler,
         loss_fn             :nn.Module,
         log_interval        :int,
         max_steps           :int,
+        tokenizer           :Tokenizer = None,
         precision           :str       ='fp32',
         grad_clip_norm      :float|int = 1.0,
         grad_accumulation   :int       = 1,
@@ -41,12 +45,13 @@ class TransformerTrainer:
     def __init__(
         self,
         model               :Transformer,
-        dataset             :tuple[data.DataLoader,data.DataLoader]|list[data.DataLoader,data.DataLoader],
+        dataloaders         :tuple[data.DataLoader,data.DataLoader]|list[data.DataLoader,data.DataLoader],
         optimizer           :torch.optim.Optimizer,
         scheduler           :torch.optim.lr_scheduler.LRScheduler,
         loss_fn             :nn.Module,
         log_interval        :int|DictConfig|dict,
         max_steps           :int,
+        tokenizer           :Tokenizer = None,
         precision           :str       ='fp32',
         grad_clip_norm      :float|int = 1.0,
         grad_accumulation   :int       = 1,
@@ -56,21 +61,23 @@ class TransformerTrainer:
     ):
         func_name = "TransformerTrainer.__init__()"
         dev_utils.type_check(
-            ("loss_fn"    ,loss_fn     ,nn.Module),
-            ("dataset"    ,dataset     ,tuple|list),
-            ("model"      ,model       ,Transformer),
-            ("dataset[0]" ,dataset[0]  ,data.DataLoader),
-            ("dataset[1]" ,dataset[1]  ,data.DataLoader),
-            ("optim"      ,optimizer   ,torch.optim.Optimizer),
-            ("scheduler"  ,scheduler   ,torch.optim.lr_scheduler.LRScheduler),
+            ("loss_fn"        ,loss_fn        ,nn.Module),
+            ("dataloaders"    ,dataloaders    ,tuple|list),
+            ("model"          ,model          ,Transformer),
+            ("tokenizer"      ,tokenizer      ,Tokenizer|None),
+            ("dataloaders[0]" ,dataloaders[0] ,data.DataLoader),
+            ("dataloaders[1]" ,dataloaders[1] ,data.DataLoader),
+            ("optim"          ,optimizer      ,torch.optim.Optimizer),
+            ("scheduler"      ,scheduler      ,torch.optim.lr_scheduler.LRScheduler),
             func_name=func_name
         )
         self.model          = model
         self.loss_fn        = loss_fn
         self.optim          = optimizer
         self.scheduler      = scheduler
-        self.train_loader   = dataset[0]
-        self.valset_loader  = dataset[1]
+        self.train_loader   = dataloaders[0]
+        self.valset_loader  = dataloaders[1]
+        self.tokenizer      = tokenizer
         
         if (
             isinstance(cfg, DictConfig|dict)
@@ -82,7 +89,8 @@ class TransformerTrainer:
                 cfg = dev_utils.make_dictconfig(log_interval)
             dev_utils.check_dictconfig(
                 cfg,
-                ["train.max_steps", "train.precision", "train.validation", "train.log_interval", "train.validation_interval", "optimizer.grad_clip_norm", "optimizer.grad_accumulation"]
+                ["train.max_steps", "train.precision", "train.validation", "train.log_interval", "train.validation_interval", "optimizer.grad_clip_norm", "optimizer.grad_accumulation"],
+                func_name="TransformerTrainer.__init__()"
             )
             max_steps           = cfg.train.max_steps
             precision           = cfg.train.precision
@@ -194,11 +202,11 @@ class TransformerTrainer:
         x      = x.to(self.device, non_blocking=True)
         target = target.to(self.device, non_blocking=True)
 
-        with torch.autocast(device_type=self.device, dtype=self.precision):
+        with torch.autocast(device_type=str(self.device), dtype=self.precision):
             logits = self.model(x)
             loss   = self.loss_fn(
                 logits.reshape(-1, logits.size(-1)),
-                target.reshape(-1)
+                target.reshape(-1).long()
             )
         return loss
     

@@ -21,7 +21,7 @@ class _RotateFunction(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output:Tensor):
-        sin,cos = nn_utils.dequantize(ctx)
+        sin,cos = nn_utils.dequantize(ctx, grad_output.dtype)
         grad_even, grad_odd = grad_output[...,0::2], grad_output[...,1::2]
 
         grad_x_even = grad_even*cos + grad_odd*sin

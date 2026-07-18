@@ -122,7 +122,7 @@ def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:
 
         if none_list:
             raise ValueError(
-                "cfg를 인자로 전달하지 않았을 때에는 max_steps, warmup_ratio, min_lr_ratio 인자를 전달해야 합니다."
+                "<build_scheduler()> cfg를 인자로 전달하지 않았을 때에는 max_steps, warmup_ratio, min_lr_ratio 인자를 전달해야 합니다."
                 f"\n현재 전달되지 않은 인자들: {none_list}"
             )
 
@@ -163,6 +163,8 @@ def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:
     )
 
 def load_dtype(name:str)->torch.dtype:
+    if name.startswith('torch.'):
+        name = name[6:]
     dtype_map = {
         'bf16':torch.bfloat16,
         'bfloat16':torch.bfloat16,
@@ -179,7 +181,7 @@ def load_dtype(name:str)->torch.dtype:
     }
     if name in dtype_map:
         return dtype_map[name]
-    dtype = getattr(torch, name, default=None)
+    dtype = getattr(torch, name, None)
     if dtype is None:
         raise ValueError(
             f"<load_dtype()> {name}에 해당하는 torch의 dtype이 존재하지 않습니다."
@@ -234,8 +236,7 @@ def save_for_backward(ctx, *args):
     ctx.tensors_length = len(quantized_tensors)
     ctx.save_for_backward(*quantized_tensors, *scales)
 
-def dequantize(ctx) -> list[Tensor]:
-    dtype = torch.get_autocast_gpu_dtype()
+def dequantize(ctx, dtype=torch.dtype) -> list[Tensor]:
     quantized = ctx.saved_tensors
     quantized_tensors = quantized[:ctx.tensors_length]
     scales = quantized[ctx.tensors_length:]
@@ -282,6 +283,9 @@ def build_loss_fn(name, *args, cfg:DictConfig|dict=None, **kwargs):
             f"<{func_name}> torch.nn에 name= {name}에 해당하는 객체/클래스/모듈이 존재하지 않습니다."
         )
     
+    if isinstance(args[0], DictConfig|dict):
+        cfg = args[0]
+        args = args[1:]
 
     if cfg is not None:
         dev_utils.type_check(
@@ -291,7 +295,6 @@ def build_loss_fn(name, *args, cfg:DictConfig|dict=None, **kwargs):
         _kwargs = kwargs
         kwargs = cfg.get(name, None)
         kwargs.update(_kwargs)
-        
     return loss_fn_cls(*args, **kwargs)
 
 def resolve_llm_cfg(cfg:DictConfig):
@@ -300,9 +303,15 @@ def resolve_llm_cfg(cfg:DictConfig):
     if cfg.train.validation == None:
         cfg.train.validation = cfg.train.validation_interval>0
     if cfg.train.max_steps == 0 or cfg.train.max_steps is None:
-        cfg.max_steps = total_tokens//(cfg.model.max_seq_len*cfg.train.batch_size)
+        cfg.train.max_steps = int(total_tokens//(cfg.model.max_seq_len*cfg.train.batch_size))
     if total_tokens%(cfg.model.max_seq_len*cfg.train.batch_size) != 0:
-        print(f"현재 total_tokens= {dev_utils.num_to_str(total_tokens)}가 seq_len*batch_size= {cfg.model.seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다.")
-        total_tokens = (total_tokens//(cfg.model.max_seq_len*cfg.train.batch_size))*(cfg.model.max_seq_len*cfg.train.batch_size)
+        print(f"<resolve_llm_cfg()> 현재 total_tokens= {dev_utils.num_to_str(total_tokens)}가 seq_len*batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다.")
+        total_tokens = int(
+            (
+                total_tokens
+                //(cfg.model.max_seq_len*cfg.train.batch_size)
+            )
+            *(cfg.model.max_seq_len*cfg.train.batch_size)
+        )
         print(f"total_tokens를 {total_tokens}로 재설정합니다.")
         cfg.dataset.total_tokens = total_tokens

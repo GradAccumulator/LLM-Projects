@@ -32,7 +32,7 @@ class _LayerNormFunction(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output:Tensor):
-        v,inv_std,gamma,beta,x_hat = nn_utils.dequantize(ctx)
+        v,inv_std,gamma,beta,x_hat = nn_utils.dequantize(ctx, grad_output.dtype)
         sum_dims = tuple(range(-len(v.shape), -len(ctx.normalized_dims)))
 
         grad_x_hat = grad_output * gamma

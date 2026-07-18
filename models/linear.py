@@ -18,7 +18,7 @@ class _LinearFunction(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output:Tensor)->tuple[Tensor, Tensor, Tensor|None]:
-        x, weight = nn_utils.dequantize(ctx)
+        x, weight = nn_utils.dequantize(ctx, grad_output.dtype)
         #x.shape = (B,T,in), grad_output.shape = (B,T,out)
         #weight.shape = (out,in)
         

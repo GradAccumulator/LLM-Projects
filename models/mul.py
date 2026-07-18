@@ -11,7 +11,7 @@ class _MulFunction(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output:Tensor):
-        a,b    = nn_utils.dequantize(ctx)
+        a,b    = nn_utils.dequantize(ctx, grad_output.dtype)
         grad_a = grad_b = None
         
         if ctx.needs_input_grad[0]:

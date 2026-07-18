@@ -8,9 +8,9 @@ class LLMDataset(data.Dataset):
     def __init__(
         self,
         seq_len:int,
-        total_tokens:int,
         datasets_dir:str|Path,
         dataset_name:str,
+        total_tokens:int=0,
         dataset_type:str='train',
         bin_dtype:torch.dtype=torch.uint16
     ):
@@ -38,6 +38,9 @@ class LLMDataset(data.Dataset):
             size=self._num_tokens,
             dtype=self._bin_dtype
         )
+
+        if self.total_tokens == 0:
+            self._total_tokens = self.num_tokens
     
     def __getitem__(self, index):
         start = index*self.seq_len
@@ -57,3 +60,5 @@ class LLMDataset(data.Dataset):
     def seq_len(self): return self._seq_len
     @property
     def dataset_path(self): return self._dataset_path
+    @property
+    def bin_dtype(self): return self._bin_dtype

@@ -258,14 +258,14 @@ class Transformer(nn.Module):
             num_layers   = model_cfg.num_layers
             num_heads    = model_cfg.num_heads
             embed_dim    = model_cfg.embed_dim  \
-                if model_cfg.embed_dim.lower() != "none" else None
+                if model_cfg.embed_dim != None else None
             dropout      = model_cfg.dropout
             max_seq_len  = model_cfg.max_seq_len
             
             ffn          = model_cfg.ffn.type
             activation   = model_cfg.ffn.activation
             ffn_dim      = model_cfg.ffn.dim \
-                if model_cfg.ffn.dim.lower() != "none" else None
+                if model_cfg.ffn.dim != None else None
             ffn_bias     = model_cfg.ffn.bias
             
             use_RoPE     = model_cfg.attention.use_rope
@@ -397,6 +397,10 @@ class Transformer(nn.Module):
     
     @property
     def ffn(self): return self.transformer_blocks[0].ffn_type
+    @property
+    def dtype(self): return list(self.parameters())[0].dtype
+    @property
+    def device(self): return list(self.parameters())[0].device
     @property
     def act_fn(self): return self.transformer_blocks[0].act_fn
     @property
