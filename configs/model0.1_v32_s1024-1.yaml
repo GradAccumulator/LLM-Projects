@@ -1,0 +1,102 @@
+model:
+  vocab_size : 32000
+  num_layers : 13
+  num_heads  : 12
+  embed_dim  : null
+  dropout    : 0.0
+  max_seq_len: 1024
+  ffn:
+    type: swiglu
+    activation: silu
+    dim : null
+    bias: false
+  attention:
+    use_rope: true
+    dropout : 0.0
+    rope:
+      base: 10000
+    bias: false
+  layernorm:
+    bias: true
+    eps : 1.0e-5
+
+train:
+  model_device: cuda
+  model_dtype : bf16
+  precision   : bf16
+  batch_size  : 6
+  log_interval: 10
+  max_steps   : null
+  validation_interval: 1000
+  validation: true
+
+dataset:
+  name: fineweb2_korean
+  total_tokens: 30B
+  bin_dtype: uint16
+
+optimizer:
+  name: AdamW
+  AdamW:
+    lr   : 1e-4
+    betas: [0.9, 0.95]
+    eps  : 1e-8
+    weight_decay: 0.0
+  SGD:
+    lr: 1e-3
+    weight_decay: 0.0
+  grad_clip_norm: 1.0
+  grad_accumulation: 5
+
+scheduler:
+  name: cosine
+  warmup_ratio: 0.03
+  min_lr_ratio: 0.1
+
+loss:
+  name: CrossEntropyLoss
+  CrossEntropyLoss:
+    ignore_index: 0
+
+
+init:
+  embedding:
+    method: normal
+    std   : 0.02
+  
+  transformer_block:
+    layer_norm:
+      gamma:
+        method: ones
+      beta:
+        method: zeros
+    
+    attention:
+      qkv_linear:
+        weight:
+          method: normal
+          std   : 0.02
+        bias:
+          method: zeros
+
+      out_linear:
+        weight:
+          method: normal
+          std   : 0.02
+        bias:
+          method: zeros
+        
+    ffn:
+      linear1:
+        weight:
+          method: normal
+          std   : 0.02
+        bias:
+          method: zeros
+        
+      linear2:
+        weight:
+          method: normal
+          std   : 0.02
+        bias:
+          method: zeros

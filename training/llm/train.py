@@ -46,7 +46,7 @@ def build_dataloaders(cfg):
     )
     return train_loader, val_loader
 
-model_params = 1#B
+model_params = 0.1#B
 vocab_size = 32#K
 seq_len = 1024
 model_num = 1
@@ -62,7 +62,7 @@ def main(cfg):
     optimizer = nn_utils.build_optimizer(model.parameters(), cfg.optimizer.name, cfg.optimizer)
     scheduler = nn_utils.build_scheduler(optimizer, cfg)
     loss_fn = nn_utils.build_loss_fn(cfg.loss.name, cfg.loss)
-    tokenizer = Tokenizer("32k_"+cfg.dataset.name)
+    tokenizer = Tokenizer(f"{vocab_size}k_"+cfg.dataset.name)
     dataloaders = build_dataloaders(cfg)
 
     trainer = TransformerTrainer(
