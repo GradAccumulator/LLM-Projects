@@ -297,6 +297,22 @@ def build_loss_fn(name, *args, cfg:DictConfig|dict=None, **kwargs):
         kwargs.update(_kwargs)
     return loss_fn_cls(*args, **kwargs)
 
+
+def _resolve_llm_init_cfg(original_cfg:DictConfig, cfg:DictConfig):
+    if 'method' in cfg:
+        if cfg.method == 'residual_std':
+            if 'std' not in cfg:
+                raise ValueError(
+                    "<resolve_llm_cfg()._resolve_llm_init_cfg()> residual_std 초기화 방식에는 'std' 설정도 필요합니다."
+                )
+            cfg.method = 'normal'
+            cfg.std = cfg.std / math.sqrt(2 * original_cfg.model.num_layers)
+        return
+    
+    for value in cfg.values():
+        if isinstance(value, DictConfig):
+            _resolve_llm_init_cfg(original_cfg, value)
+
 def resolve_llm_cfg(cfg:DictConfig):
     if isinstance(cfg.dataset.total_tokens, str):
         cfg.dataset.total_tokens = total_tokens = dev_utils.str_to_num(cfg.dataset.total_tokens)
@@ -315,3 +331,4 @@ def resolve_llm_cfg(cfg:DictConfig):
         )
         print(f"total_tokens를 {total_tokens}로 재설정합니다.")
         cfg.dataset.total_tokens = total_tokens
+    _resolve_llm_init_cfg(cfg, cfg.init)

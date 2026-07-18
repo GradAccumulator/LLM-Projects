@@ -81,7 +81,7 @@ init:
 
       out_linear:
         weight:
-          method: normal
+          method: residual_std
           std   : 0.02
         bias:
           method: zeros
@@ -96,7 +96,7 @@ init:
         
       linear2:
         weight:
-          method: normal
+          method: residual_std
           std   : 0.02
         bias:
           method: zeros
