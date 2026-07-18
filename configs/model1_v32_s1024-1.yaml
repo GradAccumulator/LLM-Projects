@@ -64,6 +64,12 @@ init:
     method: normal
     std   : 0.02
   
+  final_layer_norm:
+    gamma:
+      method: ones
+    beta:
+      method: zeros
+  
   transformer_block:
     layer_norm:
       gamma:

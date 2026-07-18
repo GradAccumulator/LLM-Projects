@@ -8,6 +8,7 @@ from .rope              import RoPE
 from .matmul            import matmul
 from configs            import runtime as rt
 from utils              import dev_utils
+from .layer_norm        import LayerNorm
 from .embedding         import Embedding
 from .transformer_block import TransformerBlock
 from .attention         import MultiHeadAttention
@@ -200,6 +201,9 @@ class Transformer(nn.Module):
             "pos_embedding": {
                 "method":...
             },
+            "final_layer_norm": {
+                "method":...
+            },
             "transformer_block": {
                 "layer_norm": {
                     "alpha": {
@@ -299,7 +303,8 @@ class Transformer(nn.Module):
         )
         init_cfg = dev_utils.make_dictconfig(init_cfg, default={
             "embedding":None,
-            "transformer_block":None
+            "transformer_block":None,
+            "final_layer_norm":None,
         })
         dev_utils.check_dictconfig(
             init_cfg,
@@ -337,6 +342,13 @@ class Transformer(nn.Module):
                 init_cfg    =init_cfg.transformer_block,
             ) for _ in range(num_layers)]
         )
+        self.final_layer_norm = LayerNorm(
+            self.embed_dim,
+            eps=self.norm_eps,
+            bias=norm_bias,
+            init_cfg=init_cfg.final_layer_norm
+        )
+        
         if not use_RoPE:
             if max_seq_len is None:
                 raise ValueError("<Transformer.__init__()> max_seq_len은 learnable positional embedding을 사용할 경우 필수입니다.")
@@ -393,6 +405,7 @@ class Transformer(nn.Module):
                 cached_sin=self.cached_sin,
                 cached_cos=self.cached_cos
             )
+        x = self.final_layer_norm(x)
         return matmul(x, self.embedding.weight.T)
     
     @property
