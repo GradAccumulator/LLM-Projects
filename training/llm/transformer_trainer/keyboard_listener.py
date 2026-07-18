@@ -1,20 +1,38 @@
-from pynput import keyboard
+import msvcrt
+from threading import Event, Thread
 
 class KeyboardListener:
     def __init__(self, key_map:dict, trainer):
-        self.key_map = key_map
-        self.trainer = trainer
-        self.listener = keyboard.Listener(self._on_press)
+        self._key_map = key_map
+        self._trainer = trainer
+
+        self._event = Event()
+        self._thread = Thread(
+            target=self._run,
+            daemon=True,
+        )
     
     def _on_press(self, key):
-        char = getattr(key, "char", None)
-        command_type = self.key_map.get(char)
+        command_type = self._key_map.get(key)
         if command_type is not None:
-            self.trainer.submit_command(command_type())
+            self._trainer.submit_command(command_type())
+    
+    def _run(self):
+        while not self._event.is_set():
+            if msvcrt.kbhit():
+                key = msvcrt.getwch()
+                
+                if key in ("\x00", "\xe0"):
+                    msvcrt.getwch()
+                    continue
+
+                self._on_press(key)
+            self._event.wait(1/60)
         
     def start(self):
-        return self.listener.start()
+        return self._thread.start()
     
     def stop(self):
-        return self.listener.stop()
+        self._event.set()
+        return self._thread.join()
     
