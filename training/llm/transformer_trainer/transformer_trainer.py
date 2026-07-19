@@ -146,9 +146,15 @@ class TransformerTrainer:
             if (res:=command.execute(self)) is not None:
                 return res
     
+    def _empty_cache(self):
+        if self.model.device.type == 'cuda':
+            torch.cuda.empty_cache()
+    
     @torch.no_grad()
     def validate(self):
+        print("<TransformerTrainer.validate()> validation started")
         self.model.eval()
+        self._empty_cache()
         tot_loss = 0.0
         total_dataset_length = 0
 
@@ -158,13 +164,17 @@ class TransformerTrainer:
             dataset_length = x.size(0) * x.size(1)
             tot_loss       += loss*dataset_length
             total_dataset_length += dataset_length
+
+            if (res:=self._process_commands()) is not None:
+                return res
         
         avg_loss = tot_loss.item()/total_dataset_length
         print(f"validated!! loss= {avg_loss}")
+        self._empty_cache()
         self.model.train()
     
     def _log(self):
-        self._tot_loss = float(self._tot_loss)
+        self._tot_loss = self._tot_loss.item()
         print(
             f"[{self.current_step}/{self.max_steps}] steps, loss= {self._tot_loss/self._tot_dataset_length:.6g},"
             f" lr= {self.optim.param_groups[0]["lr"]:.3g}"
@@ -216,13 +226,13 @@ class TransformerTrainer:
 
         self._accumulated_batches += 1
         self._tot_dataset_length  += dataset_length
-        self._tot_loss += loss.item() * dataset_length
+        self._tot_loss += loss * dataset_length
     
     def _train_one_epoch(self) -> TrainLoopResult:
         for x,target in self.train_loader:
             loss = self._forward(x, target)
             self._backward(loss, x.shape)
-            
+        
             if (res:=self._process_commands()) is not None:
                 return res
             
@@ -238,6 +248,15 @@ class TransformerTrainer:
         epoch = 1
         self._current_step = 0
         self._key_listener.start()
+        model_params = sum(p.numel() for p in self.model.parameters())
+        print(
+            "<TransformerTrainer.train()>"
+            f"\nmodel params: {model_params}(≈ {dev_utils.num_to_str(model_params)})"
+            f"\nmax steps: {self.max_steps}"
+            f"\ndataset_name: {self.train_loader.dataset.name}"
+            f"\noptimizer: {self.optim.__class__.__name__}"
+            f"\n{"-"*30}학습 시작{"-"*30}"
+        )
         try:
             while True:
                 match self._train_one_epoch():

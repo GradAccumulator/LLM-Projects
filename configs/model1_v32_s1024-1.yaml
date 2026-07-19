@@ -30,15 +30,19 @@ train:
   validation_interval: 1000
   validation: true
 
+validation:
+  batch_size: 26
+
 dataset:
   name: fineweb2_korean
-  total_tokens: 30B
+  total_tokens: 8B
+  validation_tokens: 2M
   bin_dtype: uint16
 
 optimizer:
   name: AdamW
   AdamW:
-    lr   : 1e-4
+    lr   : 2e-4
     betas: [0.9, 0.95]
     eps  : 1e-8
     weight_decay: 0.0
@@ -46,7 +50,7 @@ optimizer:
     lr: 1e-3
     weight_decay: 0.0
   grad_clip_norm: 1.0
-  grad_accumulation: 5
+  grad_accumulation: 11
 
 scheduler:
   name: cosine

@@ -17,8 +17,8 @@ class _LayerNormFunction(torch.autograd.Function):
     ):
         mean:Tensor = x.mean(dim=normalized_dims, keepdim=True)
         v           = x - mean
-        var :Tensor = (v**2).mean(dim=normalized_dims, keepdim=True)
-        inv_std     = (var+eps).rsqrt()
+        var :Tensor = (v**2).to(x.dtype).mean(dim=normalized_dims, keepdim=True)
+        inv_std     = (var+eps).rsqrt().to(x.dtype)
         
         x_hat = (x-mean)*inv_std
         

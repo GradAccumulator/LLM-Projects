@@ -316,10 +316,13 @@ def _resolve_llm_init_cfg(original_cfg:DictConfig, cfg:DictConfig):
 def resolve_llm_cfg(cfg:DictConfig):
     if isinstance(cfg.dataset.total_tokens, str):
         cfg.dataset.total_tokens = total_tokens = dev_utils.str_to_num(cfg.dataset.total_tokens)
+    if isinstance(cfg.dataset.validation_tokens, str):
+        cfg.dataset.validation_tokens = val_tokens = dev_utils.str_to_num(cfg.dataset.validation_tokens)
+    
     if cfg.train.validation == None:
         cfg.train.validation = cfg.train.validation_interval>0
     if cfg.train.max_steps == 0 or cfg.train.max_steps is None:
-        cfg.train.max_steps = int(total_tokens//(cfg.model.max_seq_len*cfg.train.batch_size))
+        cfg.train.max_steps = int(total_tokens//(cfg.model.max_seq_len*cfg.train.batch_size*cfg.optimizer.grad_accumulation))
     if total_tokens%(cfg.model.max_seq_len*cfg.train.batch_size) != 0:
         print(f"<resolve_llm_cfg()> 현재 total_tokens= {dev_utils.num_to_str(total_tokens)}가 seq_len*batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다.")
         total_tokens = int(
@@ -329,6 +332,19 @@ def resolve_llm_cfg(cfg:DictConfig):
             )
             *(cfg.model.max_seq_len*cfg.train.batch_size)
         )
-        print(f"total_tokens를 {total_tokens}로 재설정합니다.")
+        print(f"total_tokens를 {total_tokens}(≈{dev_utils.num_to_str(total_tokens)})로 재설정합니다.")
         cfg.dataset.total_tokens = total_tokens
+    
+    if val_tokens%(cfg.model.max_seq_len*cfg.validation.batch_size) != 0:
+        print(f"<resolve_llm_cfg()> 현재 validation_tokens= {dev_utils.num_to_str(val_tokens)}가 seq_len*validation_batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다.")
+        val_tokens = int(
+            (
+                val_tokens
+                //(cfg.model.max_seq_len*cfg.train.batch_size)
+            )
+            *(cfg.model.max_seq_len*cfg.train.batch_size)
+        )
+        print(f"validation_tokens를 {val_tokens}(≈{dev_utils.num_to_str(val_tokens)})로 재설정합니다.")
+        cfg.dataset.validation_tokens = val_tokens
+
     _resolve_llm_init_cfg(cfg, cfg.init)

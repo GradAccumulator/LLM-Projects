@@ -26,7 +26,8 @@ def build_dataloaders(cfg):
         cfg.model.max_seq_len,
         datasets_dir =dataset_dir,
         dataset_name =cfg.dataset.name,
-        dataset_type ="train",
+        total_tokens =cfg.dataset.validation_tokens,
+        dataset_type ="test",
         bin_dtype    =nn_utils.load_dtype(cfg.dataset.bin_dtype)
     )
 
@@ -39,14 +40,14 @@ def build_dataloaders(cfg):
     )
     val_loader = data.DataLoader(
         val_dataset,
-        batch_size=cfg.train.batch_size,
+        batch_size=cfg.validation.batch_size,
         shuffle=True,
         num_workers=0,
         pin_memory=True
     )
     return train_loader, val_loader
 
-model_params = 0.1#B
+model_params = 1#B
 vocab_size = 32#K
 seq_len = 1024
 model_num = 1

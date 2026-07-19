@@ -32,7 +32,7 @@ train:
 
 dataset:
   name: fineweb2_korean
-  total_tokens: 30B
+  total_tokens: 300M
   bin_dtype: uint16
 
 optimizer:

@@ -38,6 +38,8 @@ class LLMDataset(data.Dataset):
             size=self._num_tokens,
             dtype=self._bin_dtype
         )
+        self._dataset_name = dataset_name
+        self._dataset_type = dataset_type
 
         if self.total_tokens == 0:
             self._total_tokens = self.num_tokens
@@ -62,3 +64,7 @@ class LLMDataset(data.Dataset):
     def dataset_path(self): return self._dataset_path
     @property
     def bin_dtype(self): return self._bin_dtype
+    @property
+    def name(self): return self._dataset_name
+    @property
+    def type(self): return self._dataset_type
