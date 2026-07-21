@@ -5,6 +5,7 @@ from torch import Tensor
 import torch.utils.data as data
 import hydra
 from pathlib import Path
+from typing import Iterable
 
 from utils import dev_utils, nn_utils
 from tokenizer import Tokenizer
@@ -47,6 +48,27 @@ def build_dataloaders(cfg):
     )
     return train_loader, val_loader
 
+def separate_decay_params(params:Iterable[nn.Parameter], weight_decay:float):
+    if weight_decay == 0:
+        return params
+    param_groups = [
+        {
+            "params":[],
+            "weight_decay":weight_decay,
+        },
+        {
+            "params":[],
+            "weight_decay":0.0
+        },
+    ]
+
+    for param in params:
+        if param.ndim >= 2:
+            param_groups[0]['params'].append(param)
+        else:
+            param_groups[1]['params'].append(param)
+    return param_groups
+
 model_params = 1#B
 vocab_size = 32#K
 seq_len = 1024
@@ -60,7 +82,9 @@ def main(cfg):
         cfg.train.model_device, 
         nn_utils.load_dtype(cfg.train.model_dtype),
     )
-    optimizer = nn_utils.build_optimizer(model.parameters(), cfg.optimizer.name, cfg.optimizer)
+    weight_decay = cfg.optimizer[cfg.optimizer.name].get("weight_decay", 0.0)
+    param_groups = separate_decay_params(model.parameters(), weight_decay)
+    optimizer = nn_utils.build_optimizer(param_groups, cfg.optimizer.name, cfg.optimizer)
     scheduler = nn_utils.build_scheduler(optimizer, cfg)
     loss_fn = nn_utils.build_loss_fn(cfg.loss.name, cfg.loss)
     tokenizer = Tokenizer(f"{vocab_size}k_"+cfg.dataset.name)

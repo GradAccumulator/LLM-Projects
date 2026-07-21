@@ -45,7 +45,7 @@ optimizer:
     lr   : 2e-4
     betas: [0.9, 0.95]
     eps  : 1e-8
-    weight_decay: 0.0
+    weight_decay: 0.1
   SGD:
     lr: 1e-3
     weight_decay: 0.0
