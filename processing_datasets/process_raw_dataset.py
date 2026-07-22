@@ -3,10 +3,8 @@ from multiprocessing import Pool
 import shutil
 from pathlib import Path
 
-BASE_DIR = Path(
-    r'C:\Users\LEEJUHYOUNG\Documents\LLM Projects'
-    r'\datasets\llm\fineweb2_korean'
-)
+DATASET_NAME = 'fineweb2_korean'
+BASE_DIR = Path(__file__).parent.parent/'datasets'/'llm'/DATASET_NAME
 
 DATASET_TYPE = 'train'
 TRAIN_FILE_GROUPS = [(0,1,2), (3,4)]

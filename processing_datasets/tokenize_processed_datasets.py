@@ -7,10 +7,9 @@ from utils.dev_utils import num_to_str,M
 
 CHUNK_SIZE = 500*M
 
-BASE_DIR = Path(
-    r'C:\Users\LEEJUHYOUNG\Documents\LLM Projects'
-    r'\datasets\llm\fineweb2_korean'
-)
+
+DATASET_NAME = 'fineweb2_korean'
+BASE_DIR = Path(__file__).parent.parent/'datasets'/'llm'/DATASET_NAME
 DATASET_TYPE = 'train'
 SAVE_PATH = BASE_DIR/"tokenized"/(DATASET_TYPE+".bin")
 DATASET_PATH = BASE_DIR/"processed"/(DATASET_TYPE+".txt")
