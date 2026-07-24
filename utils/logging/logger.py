@@ -47,7 +47,7 @@ class Logger(ABC):
     
     def __call__(self, *args, **kwargs):
         kwargs['now'] = datetime.now()
-        Thread(target=self.log, args=args, kwargs=kwargs).start()
+        Thread(target=self.log, args=args, kwargs=kwargs, daemon=False).start()
 
 class LoggerList(Logger):
     def __init__(self, *loggers):

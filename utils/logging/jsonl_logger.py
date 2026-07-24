@@ -36,6 +36,7 @@ class JsonlLogger(Logger):
         trainer,
         event:TrainingEvent,
         loss=None, 
+        tokens_seen=None,
         reason:TrainLoopResult=None, 
         ppl=None, 
         error_type=None,
@@ -59,7 +60,7 @@ class JsonlLogger(Logger):
                 record.update({
                     "epoch":trainer.current_epoch,
                     "loss":loss,
-                    "tokens_seen":trainer.tokens_seen,
+                    "tokens_seen":tokens_seen,
                     "lr":trainer.optim.param_groups[0]["lr"]
                 })
             # SYSTEM

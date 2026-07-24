@@ -214,6 +214,7 @@ class TransformerTrainer:
                 event=TrainingEvent.LOG_INTERVAL_REACHED,
                 trainer=self,
                 loss=self._tot_loss/self._tokens_seen,
+                tokens_seen=self.tokens_seen
             )
             self._tokens_seen = 0
             self._tot_loss    = 0.0

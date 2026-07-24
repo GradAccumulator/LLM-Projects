@@ -4,3 +4,4 @@ outputs/
 *.parquet
 *.txt
 *.bin
+*.jsonl

@@ -35,6 +35,7 @@ class TxtLogger(Logger):
             trainer,
             event:TrainingEvent,
             loss=None,
+            tokens_seen=None,
             reason:TrainLoopResult=None, 
             ppl=None, 
             error_name=None,
@@ -55,7 +56,7 @@ class TxtLogger(Logger):
                 case TrainingEvent.LOG_INTERVAL_REACHED:
                     record += (
                         f"{trainer.current_epoch} epochs, [{trainer.current_step}/{trainer.max_steps}] steps, "
-                        f"loss= {loss:.6g}, tokens_seen= {trainer.tokens_seen}, lr= {trainer.optim.param_groups[0]["lr"]:.4g}"
+                        f"loss= {loss:.6g}, tokens_seen= {tokens_seen}, lr= {trainer.optim.param_groups[0]["lr"]:.4g}"
                     )
                 # SYSTEM
                 case TrainingEvent.TRAIN_STARTED:
