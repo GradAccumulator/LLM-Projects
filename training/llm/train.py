@@ -12,6 +12,7 @@ from tokenizer import Tokenizer
 from models import Transformer
 from .transformer_trainer import TransformerTrainer
 from processing_datasets import LLMDataset
+from utils.logging import HWLogger,JsonlLogger,TerminalLogger,TxtLogger,LoggerList
 
 def build_dataloaders(cfg):
     dataset_dir = Path(__file__).resolve().parent.parent.parent/"datasets"
@@ -69,12 +70,23 @@ def separate_decay_params(params:Iterable[nn.Parameter], weight_decay:float):
             param_groups[1]['params'].append(param)
     return param_groups
 
+
 model_params = 1#B
 vocab_size = 32#K
 seq_len = 1024
 model_num = 1
 
 model_name = f"model{model_params}_v{vocab_size}_s{seq_len}-{model_num}"
+
+def load_loggers():
+    log_dir = Path(__file__).parent.parent.parent/'logs'
+    return LoggerList(
+        HWLogger(log_dir/"hardware_logs", file_name=f'{model_name}', interval=5),
+        JsonlLogger(log_dir/"jsonl_logs", file_name=f'{model_name}'),
+        TerminalLogger(),
+        TxtLogger(log_dir/'txt_logs', file_name=f'{model_name}')
+    )
+
 @hydra.main(version_base=None, config_path="../../configs", config_name=model_name)
 def main(cfg):
     nn_utils.resolve_llm_cfg(cfg)
@@ -98,6 +110,7 @@ def main(cfg):
         loss_fn,
         cfg,
         tokenizer,
+        loggers=load_loggers()
     )
     trainer.train()
 

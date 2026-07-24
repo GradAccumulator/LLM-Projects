@@ -2,6 +2,7 @@ from torch      import Tensor
 from queue      import Queue, Empty
 from typing     import overload
 from omegaconf  import DictConfig
+import math
 import torch, torch.nn  as nn
 import torch.utils.data as data
 
@@ -10,8 +11,8 @@ from models             import Transformer
 from .keyboard_listener import KeyboardListener
 from utils              import dev_utils,nn_utils
 from .commands          import TrainLoopResult, TrainingCommand
-from typing import TYPE_CHECKING
 from tokenizer import Tokenizer
+from utils.logging import LoggerList, TrainingEvent
 
 class TransformerTrainer:
     @overload
@@ -24,6 +25,7 @@ class TransformerTrainer:
         loss_fn     :nn.Module,
         cfg         :DictConfig|dict,
         tokenizer   :Tokenizer = None,
+        loggers     :LoggerList=None,
     ):...
     @overload
     def __init__(
@@ -36,6 +38,7 @@ class TransformerTrainer:
         log_interval        :int,
         max_steps           :int,
         tokenizer           :Tokenizer = None,
+        loggers             :LoggerList=None,
         precision           :str       ='fp32',
         grad_clip_norm      :float|int = 1.0,
         grad_accumulation   :int       = 1,
@@ -52,6 +55,7 @@ class TransformerTrainer:
         log_interval        :int|DictConfig|dict,
         max_steps           :int,
         tokenizer           :Tokenizer = None,
+        loggers             :LoggerList=None,
         precision           :str       ='fp32',
         grad_clip_norm      :float|int = 1.0,
         grad_accumulation   :int       = 1,
@@ -62,6 +66,7 @@ class TransformerTrainer:
         func_name = "TransformerTrainer.__init__()"
         dev_utils.type_check(
             ("loss_fn"        ,loss_fn        ,nn.Module),
+            ("loggers"        ,loggers        ,LoggerList),
             ("dataloaders"    ,dataloaders    ,tuple|list),
             ("model"          ,model          ,Transformer),
             ("tokenizer"      ,tokenizer      ,Tokenizer|None),
@@ -78,6 +83,7 @@ class TransformerTrainer:
         self.train_loader   = dataloaders[0]
         self.valset_loader  = dataloaders[1]
         self.tokenizer      = tokenizer
+        self.loggers        = loggers or LoggerList()
         
         if (
             isinstance(cfg, DictConfig|dict)
@@ -120,7 +126,7 @@ class TransformerTrainer:
         self.validation_interval = validation_interval
         
         self._tot_loss = 0.0
-        self._tot_dataset_length  = 0
+        self._tokens_seen  = 0
         self._accumulated_batches = 0
         self._command_queue:Queue[TrainingCommand] = Queue()
         self._current_step = 0
@@ -148,6 +154,7 @@ class TransformerTrainer:
     
     def _empty_cache(self):
         if self.model.device.type == 'cuda':
+            torch.cuda.synchronize()
             torch.cuda.empty_cache()
     
     @torch.no_grad()
@@ -169,19 +176,31 @@ class TransformerTrainer:
                 return res
         
         avg_loss = tot_loss.item()/total_dataset_length
-        print(f"validated!! loss= {avg_loss}")
+        self._log(
+            event=TrainingEvent.VALIDATION_ENDED,
+            loss=avg_loss,
+            ppl=math.exp(loss)
+        )
         self._empty_cache()
         self.model.train()
+
+
+    def _log(self, event, *args, **kwargs):
+        self.loggers(*args, event=event, **kwargs)
     
-    def _log(self):
-        self._tot_loss = self._tot_loss.item()
-        print(
-            f"[{self.current_step}/{self.max_steps}] steps, loss= {self._tot_loss/self._tot_dataset_length:.6g},"
-            f" lr= {self.optim.param_groups[0]["lr"]:.3g}"
+    def stop_train(self):
+        self._log(
+            event=TrainingEvent.TRAIN_STOPPED,
+            trainer=self,
         )
-        self._tot_dataset_length = 0
-        self._tot_loss           = 0.0
-    
+        
+        breakpoint()
+        
+        self._log(
+            event=TrainingEvent.TRAIN_RESUMED,
+            trainer=self,
+        )
+        
     def _handle_step_conditions(self):
         if (
             self.validation
@@ -191,7 +210,13 @@ class TransformerTrainer:
             self.validate()
 
         if self.current_step%self.log_interval == 0:
-            self._log()
+            self._log(
+                event=TrainingEvent.LOG_INTERVAL_REACHED,
+                trainer=self,
+                loss=self._tot_loss/self._tokens_seen,
+            )
+            self._tokens_seen = 0
+            self._tot_loss    = 0.0
         
         if self.current_step >= self.max_steps:
             return TrainLoopResult.MAX_STEPS_REACHED
@@ -207,6 +232,11 @@ class TransformerTrainer:
         
         if (res:=self._handle_step_conditions()) is not None:
             return res
+
+        self._log(
+            event=TrainingEvent.STEP_ENDED,
+            trainer=self,
+        )
     
     def _forward(self, x:Tensor, target:Tensor) -> Tensor:
         x      = x.to(self.device, non_blocking=True)
@@ -225,8 +255,8 @@ class TransformerTrainer:
         dataset_length = x_shape[0] * x_shape[1]
 
         self._accumulated_batches += 1
-        self._tot_dataset_length  += dataset_length
-        self._tot_loss += loss * dataset_length
+        self._tokens_seen  += dataset_length
+        self._tot_loss += loss.item() * dataset_length
     
     def _train_one_epoch(self) -> TrainLoopResult:
         for x,target in self.train_loader:
@@ -242,41 +272,60 @@ class TransformerTrainer:
             ):
                 return res
             
-        return TrainLoopResult.ONE_EPOCH_COMPLETED
+        return TrainLoopResult.EPOCH_COMPLETED
     
     def train(self):
-        epoch = 1
+        self._current_epoch = 1
         self._current_step = 0
         self._key_listener.start()
-        model_params = sum(p.numel() for p in self.model.parameters())
-        print(
-            "<TransformerTrainer.train()>"
-            f"\nmodel params: {model_params}(≈ {dev_utils.num_to_str(model_params)})"
-            f"\nmax steps: {self.max_steps}"
-            f"\ndataset_name: {self.train_loader.dataset.name}"
-            f"\noptimizer: {self.optim.__class__.__name__}"
-            f"\n{"-"*30}학습 시작{"-"*30}"
+        self._log(
+            event=TrainingEvent.TRAIN_STARTED,
+            trainer=self,
         )
         try:
             while True:
                 match self._train_one_epoch():
                     case TrainLoopResult.MAX_STEPS_REACHED:
-                        print(f"현재 step= {self.current_step}이 최대 step= {self.max_steps}에 도달하여 학습이 종료됩니다.")
+                        self._log(
+                            event=TrainingEvent.TRAIN_COMPLETED,
+                            reason=TrainLoopResult.MAX_STEPS_REACHED,
+                            trainer=self,
+                        )
                         break
                     case TrainLoopResult.USER_CANCELLED:
                         print("학습 종료")
+                        self._log(
+                            event=TrainingEvent.TRAIN_COMPLETED,
+                            reason=TrainLoopResult.USER_CANCELLED,
+                            trainer=self,
+                        )
                         break
-                    case TrainLoopResult.ONE_EPOCH_COMPLETED:
-                        print(f"현재 epoch= {epoch}")
-                        print(f"{self._current_step}/{self.max_steps}스텝 학습 완료")
-                epoch += 1
+                    case TrainLoopResult.EPOCH_COMPLETED:
+                        self._log(
+                            event=TrainingEvent.EPOCH_COMPLETED,
+                            reason=TrainLoopResult.EPOCH_COMPLETED,
+                            trainer=self,
+                        )
+                self._current_epoch += 1
+        except Exception as e:
+            self._log(
+                event=TrainingEvent.ERROR_OCCURRED,
+                trainer=self,
+                error_type = type(e).__name__,
+                error_msg = str(e)
+            )
+            raise e
         finally:
             self._key_listener.stop()
+            self.loggers.close()
+
     
     @property
     def dtype(self): return self.model.dtype
     @property
     def device(self): return self.model.device
+    @property
+    def tokens_seen(self): return self._tokens_seen
     @property
     def precision(self): return self._precision
     @property
@@ -285,6 +334,8 @@ class TransformerTrainer:
     def log_interval(self): return self._log_interval
     @property
     def current_step(self): return self._current_step
+    @property
+    def current_epoch(self): return self._current_epoch
     @property
     def grad_clip_norm(self): return self._grad_clip_norm
     @property

@@ -4,7 +4,7 @@ from enum import Enum, auto
 
 class TrainLoopResult(Enum):
     USER_CANCELLED = auto()
-    ONE_EPOCH_COMPLETED = auto()
+    EPOCH_COMPLETED = auto()
     MAX_STEPS_REACHED = auto()
 
 class TrainingCommand(ABC):
@@ -21,4 +21,4 @@ class ValidateCommand(TrainingCommand):
 
 class BreakpointCommand(TrainingCommand):
     def execute(self, trainer):
-        breakpoint()
+        trainer.stop_train()
