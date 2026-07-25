@@ -178,6 +178,7 @@ class TransformerTrainer:
         avg_loss = tot_loss.item()/total_dataset_length
         self._log(
             event=TrainingEvent.VALIDATION_ENDED,
+            trainer=self,
             loss=avg_loss,
             ppl=math.exp(loss)
         )
@@ -202,13 +203,6 @@ class TransformerTrainer:
         )
         
     def _handle_step_conditions(self):
-        if (
-            self.validation
-            and self.validation_interval is not None
-            and self.current_step % self.validation_interval == 0
-        ):
-            self.validate()
-
         if self.current_step%self.log_interval == 0:
             self._log(
                 event=TrainingEvent.LOG_INTERVAL_REACHED,
@@ -218,6 +212,13 @@ class TransformerTrainer:
             )
             self._tokens_seen = 0
             self._tot_loss    = 0.0
+        
+        if (
+            self.validation
+            and self.validation_interval is not None
+            and self.current_step % self.validation_interval == 0
+        ):
+            self.validate()
         
         if self.current_step >= self.max_steps:
             return TrainLoopResult.MAX_STEPS_REACHED
