@@ -11,5 +11,5 @@ __all__ = [
     "TrainingEvent",
     "TerminalLogger",
     "TxtLogger",
-    "LoggerList"
+    "LoggerList",
 ]

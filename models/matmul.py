@@ -1,8 +1,9 @@
 import torch, torch.nn as nn
-from torch     import Tensor
-from configs   import runtime as rt
+from torch import Tensor
+from configs import runtime as rt
 
-from utils     import nn_utils
+from utils import nn_utils
+
 
 class _MatmulFunction(torch.autograd.Function):
     @staticmethod
@@ -14,28 +15,44 @@ class _MatmulFunction(torch.autograd.Function):
             )
 
     @staticmethod
-    def forward(ctx, a:Tensor, b:Tensor):
-        #a.shape = (..., a, c), b.shape = (..., c, b), out.shape = (..., a,b)
+    def forward(ctx, a: Tensor, b: Tensor):
+        # a.shape = (..., a, c), b.shape = (..., c, b), out.shape = (..., a,b)
         if rt.DEBUG_CHECKS:
             _MatmulFunction._forward_debug(a, b)
         nn_utils.save_for_backward(ctx, a, b)
 
-        return a@b
-    
+        return a @ b
+
     @staticmethod
-    def backward(ctx, grad_output:Tensor):
-        a, b   = nn_utils.dequantize(ctx, grad_output.dtype)
+    def backward_debug(a, b, grad_output):
+        func_name = "_MatmulFunction.backward_debug()"
+        if grad_output.dtype != a.dtype:
+            raise ValueError(
+                f"<{func_name}> grad_output의 dtype과 a의 dtype이 다릅니다."
+                f"grad_output: {grad_output.dtype}, a: {a.dtype}"
+            )
+        if grad_output.dtype != b.dtype:
+            raise ValueError(
+                f"<{func_name}> grad_output의 dtype과 b의 dtype이 다릅니다. "
+                f"grad_output: {grad_output.dtype}, b: {b.dtype}"
+            )
+
+    @staticmethod
+    def backward(ctx, grad_output: Tensor):
+        a, b = nn_utils.saved_tensors(ctx, grad_output.dtype)
         grad_a = grad_b = None
 
-        if grad_output.dtype != b.dtype:
-            breakpoint()
+        if rt.DEBUG_CHECKS:
+            _MatmulFunction.backward_debug(a, b, grad_output)
+
         if ctx.needs_input_grad[0]:
-            grad_a = grad_output@b.transpose(-1, -2)
-        
+            grad_a = grad_output @ b.transpose(-1, -2)
+
         if ctx.needs_input_grad[1]:
-            grad_b = a.transpose(-1, -2)@grad_output
+            grad_b = a.transpose(-1, -2) @ grad_output
 
         return grad_a, grad_b
 
-def matmul(a:Tensor, b:Tensor) -> Tensor:
+
+def matmul(a: Tensor, b: Tensor) -> Tensor:
     return _MatmulFunction.apply(a, b)

@@ -7,17 +7,21 @@ class TrainLoopResult(Enum):
     EPOCH_COMPLETED = auto()
     MAX_STEPS_REACHED = auto()
 
+
 class TrainingCommand(ABC):
     @abstractmethod
-    def execute(self, trainer) -> TrainLoopResult|None:...
+    def execute(self, trainer) -> TrainLoopResult | None: ...
+
 
 class CancelTrainingCommand(TrainingCommand):
     def execute(self, trainer):
-        return TrainLoopResult.USER_CANCELLED
+        trainer.cancel_training()
+
 
 class ValidateCommand(TrainingCommand):
     def execute(self, trainer):
         trainer.validate()
+
 
 class BreakpointCommand(TrainingCommand):
     def execute(self, trainer):

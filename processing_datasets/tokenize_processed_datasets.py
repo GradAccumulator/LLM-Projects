@@ -2,27 +2,29 @@ from tokenizer import Tokenizer
 from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
-from utils.dev_utils import num_to_str,M
+from utils.dev_utils import num_to_str, M
+
+CHUNK_SIZE = 500 * M
 
 
-CHUNK_SIZE = 500*M
-
-
-DATASET_NAME = 'fineweb2_korean'
-BASE_DIR = Path(__file__).parent.parent/'datasets'/'llm'/DATASET_NAME
-DATASET_TYPE = 'train'
-SAVE_PATH = BASE_DIR/"tokenized"/(DATASET_TYPE+".bin")
-DATASET_PATH = BASE_DIR/"processed"/(DATASET_TYPE+".txt")
+DATASET_NAME = "fineweb2_korean"
+BASE_DIR = Path(__file__).parent.parent / "datasets" / "llm" / DATASET_NAME
+DATASET_TYPE = "train"
+SAVE_PATH = BASE_DIR / "tokenized" / (DATASET_TYPE + ".bin")
+DATASET_PATH = BASE_DIR / "processed" / (DATASET_TYPE + ".txt")
 
 tokenizer = Tokenizer(model_name="32k_fineweb2_korean")
 
 
-def save_one_chunk(chunk_idx:int, chunk:NDArray[np.uint16]):
-    with SAVE_PATH.open('ab') as f:
+def save_one_chunk(chunk_idx: int, chunk: NDArray[np.uint16]):
+    with SAVE_PATH.open("ab") as f:
         chunk.tofile(f)
 
-    processed_tokens = (chunk_idx+1)*CHUNK_SIZE
-    print(f"[처리 완료] {chunk_idx+1}번째 청크 처리 완료, 현재까지 {num_to_str(processed_tokens)} 토큰 처리 완료")
+    processed_tokens = (chunk_idx + 1) * CHUNK_SIZE
+    print(
+        f"[처리 완료] {chunk_idx+1}번째 청크 처리 완료, 현재까지 {num_to_str(processed_tokens)} 토큰 처리 완료"
+    )
+
 
 def main() -> None:
     chunk_idx = 0
@@ -31,30 +33,39 @@ def main() -> None:
     next_progress_segment = 1
     token_buffer = np.empty(CHUNK_SIZE, dtype=np.uint16)
     print("[시작] 토크나이징 시작")
-    with DATASET_PATH.open("r", encoding='utf-8') as f:
+    with DATASET_PATH.open("r", encoding="utf-8") as f:
         print(f"[처리 시작] 1번째 청크({num_to_str(CHUNK_SIZE)} 토큰) 처리 시작")
         for line in f:
-            line_token_ids:NDArray[np.uint16] = tokenizer.encode(line, return_type=np.uint16)
+            line_token_ids: NDArray[np.uint16] = tokenizer.encode(
+                line, return_type=np.uint16
+            )
 
-            while len(line_token_ids)>=(remaining_capacity:=CHUNK_SIZE - write_pos):
+            while len(line_token_ids) >= (remaining_capacity := CHUNK_SIZE - write_pos):
                 token_buffer[write_pos:] = line_token_ids[:remaining_capacity]
 
                 save_one_chunk(chunk_idx, token_buffer)
                 chunk_idx += 1
-                print(f"[처리 시작] {chunk_idx+1}번째 청크({num_to_str(CHUNK_SIZE)} 토큰) 처리 시작")
+                print(
+                    f"[처리 시작] {chunk_idx+1}번째 청크({num_to_str(CHUNK_SIZE)} 토큰) 처리 시작"
+                )
 
                 line_token_ids = line_token_ids[remaining_capacity:]
                 write_pos = 0
                 next_progress_segment = 1
-            
-            token_buffer[write_pos:write_pos+len(line_token_ids)] = line_token_ids
-            write_pos += len(line_token_ids)
-            if next_progress_segment != 0 and write_pos>=CHUNK_SIZE*(next_progress_segment/progress_segments):
-                print(f"[처리중] 현재까지 {num_to_str(CHUNK_SIZE*chunk_idx + write_pos)} 토큰 처리 완료")
-                next_progress_segment+=1
 
-    if write_pos  > 0:
+            token_buffer[write_pos : write_pos + len(line_token_ids)] = line_token_ids
+            write_pos += len(line_token_ids)
+            if next_progress_segment != 0 and write_pos >= CHUNK_SIZE * (
+                next_progress_segment / progress_segments
+            ):
+                print(
+                    f"[처리중] 현재까지 {num_to_str(CHUNK_SIZE*chunk_idx + write_pos)} 토큰 처리 완료"
+                )
+                next_progress_segment += 1
+
+    if write_pos > 0:
         save_one_chunk(chunk_idx, token_buffer[:write_pos])
+
 
 if __name__ == "__main__":
     main()

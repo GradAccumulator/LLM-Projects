@@ -2,47 +2,50 @@ import math
 import torch
 import omegaconf
 import torch.optim as optim
-from typing import overload,Literal
+from typing import overload, Literal
 
-from .          import dev_utils
-from torch      import Tensor
-from omegaconf  import DictConfig
-from configs    import runtime as rt
+from . import dev_utils
+from torch import Tensor
+from omegaconf import DictConfig
+from configs import runtime as rt
 
 
-def init_tensor(*shape:int, init_cfg:DictConfig|dict):
+def init_parameter(*shape: int, init_cfg: DictConfig | dict):
     match init_cfg.method:
         case "zeros":
-            return torch.zeros(*shape)
+            tensor = torch.zeros(*shape)
         case "ones":
-            return torch.ones(*shape)
+            tensor = torch.ones(*shape)
         case "normal":
-            return torch.randn(*shape) * init_cfg['std']
+            tensor = torch.randn(*shape) * init_cfg["std"]
         case method:
             raise ValueError(
                 f"<init_tensor()> 전달된 초기화 방식이 잘못되었습니다. : {method}"
             )
+    return torch.nn.Parameter(tensor)
+
 
 @overload
-def build_optimizer(params, name:str, cfg:DictConfig=None) -> optim.Optimizer:
-    '''```
+def build_optimizer(params, name: str, cfg: DictConfig = None) -> optim.Optimizer:
+    """```
     "cfg" = {
         "name":N,
         N: {
-            "lr": ..., 
-            "weight_decay":..., 
+            "lr": ...,
+            "weight_decay":...,
             ...
         }
     }
-    ```'''
+    ```"""
     ...
+
+
 @overload
-def build_optimizer(params, name:str, *args, **kwargs) -> optim.Optimizer:...
-def build_optimizer(params, name:str, *args, cfg:DictConfig=None, **kwargs) -> optim.Optimizer:
-    dev_utils.type_check(
-        ("name", name, str),
-        func_name="build_optimizer()"
-    )
+def build_optimizer(params, name: str, *args, **kwargs) -> optim.Optimizer: ...
+def build_optimizer(
+    params, name: str, *args, cfg: DictConfig = None, **kwargs
+) -> optim.Optimizer:
+    dev_utils.type_check(("name", name, str), func_name="build_optimizer()")
 
     optimizer_cls = getattr(optim, name, None)
 
@@ -51,20 +54,21 @@ def build_optimizer(params, name:str, *args, cfg:DictConfig=None, **kwargs) -> o
             f"<build_optimizer()> torch.optim에 name={name}인 optimizer가 없습니다."
         )
 
-    if not isinstance(optimizer_cls, type) or not issubclass(optimizer_cls, optim.Optimizer):
+    if not isinstance(optimizer_cls, type) or not issubclass(
+        optimizer_cls, optim.Optimizer
+    ):
         raise ValueError(
             f"<build_optimizer()> torch.optim.{name}은 Optimizer 클래스가 아닙니다."
         )
-    
-    has_positional_cfg = len(args) > 0 and isinstance(args[0], DictConfig|dict)
-    if has_positional_cfg or cfg is not None :
+
+    has_positional_cfg = len(args) > 0 and isinstance(args[0], DictConfig | dict)
+    if has_positional_cfg or cfg is not None:
         if has_positional_cfg:
             cfg = args[0]
             args = args[1:]
         else:
             dev_utils.type_check(
-                ("cfg", cfg, DictConfig|dict),
-                func_name="build_optimizer()"
+                ("cfg", cfg, DictConfig | dict), func_name="build_optimizer()"
             )
         cfg = dev_utils.make_dictconfig(cfg)
         if cfg.get(f"{name}") is None:
@@ -75,14 +79,15 @@ def build_optimizer(params, name:str, *args, cfg:DictConfig=None, **kwargs) -> o
         optimizer_kwargs.update(kwargs)
         return optimizer_cls(params=params, *args, **optimizer_kwargs)
     if args == () and kwargs == {}:
-        raise ValueError(
-            f"<build_optimizer()> cfg.optimizer에 {name} 설정이 없습니다."
-        )
+        raise ValueError(f"<build_optimizer()> cfg.optimizer에 {name} 설정이 없습니다.")
     return optimizer_cls(params=params, *args, **kwargs)
 
+
 @overload
-def build_scheduler(optimizer:optim.Optimizer, cfg:DictConfig) -> optim.lr_scheduler.LRScheduler:
-    '''```
+def build_scheduler(
+    optimizer: optim.Optimizer, cfg: DictConfig
+) -> optim.lr_scheduler.LRScheduler:
+    """```
     cfg = {
         "train": {
             "max_steps":...
@@ -92,23 +97,40 @@ def build_scheduler(optimizer:optim.Optimizer, cfg:DictConfig) -> optim.lr_sched
             "min_lr_ratio":...
         }
     }
-    ```'''
+    ```"""
     ...
+
+
 @overload
-def build_scheduler(optimizer:optim.Optimizer, max_steps:int, warmup_ratio:float|int, min_lr_ratio:float|int) -> optim.lr_scheduler.LRScheduler:...
-def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:float|int=None, min_lr_ratio:float|int=None,*,cfg:DictConfig=None) -> optim.lr_scheduler.LRScheduler:
-    if cfg is not None or isinstance(max_steps, DictConfig|dict):
+def build_scheduler(
+    optimizer: optim.Optimizer,
+    max_steps: int,
+    warmup_ratio: float | int,
+    min_lr_ratio: float | int,
+) -> optim.lr_scheduler.LRScheduler: ...
+def build_scheduler(
+    optimizer: optim.Optimizer,
+    max_steps: int = None,
+    warmup_ratio: float | int = None,
+    min_lr_ratio: float | int = None,
+    *,
+    cfg: DictConfig = None,
+) -> optim.lr_scheduler.LRScheduler:
+    if cfg is not None or isinstance(max_steps, DictConfig | dict):
         if cfg is not None:
             dev_utils.type_check(
-                ("cfg", cfg, DictConfig|dict),
-                func_name="build_scheduler()"
+                ("cfg", cfg, DictConfig | dict), func_name="build_scheduler()"
             )
         else:
             cfg = max_steps
 
         cfg = dev_utils.make_dictconfig(cfg)
-        dev_utils.check_dictconfig(cfg, ('train.max_steps', 'scheduler.warmup_ratio', 'scheduler.min_lr_ratio'), "build_scheduler()")
-        max_steps    = cfg.train.max_steps
+        dev_utils.check_dictconfig(
+            cfg,
+            ("train.max_steps", "scheduler.warmup_ratio", "scheduler.min_lr_ratio"),
+            "build_scheduler()",
+        )
+        max_steps = cfg.train.max_steps
         warmup_ratio = cfg.scheduler.warmup_ratio
         min_lr_ratio = cfg.scheduler.min_lr_ratio
     else:
@@ -116,9 +138,9 @@ def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:
         if max_steps is None:
             none_list.append("max_steps")
         if warmup_ratio is None:
-            none_list.append('warmup_ratio')
+            none_list.append("warmup_ratio")
         if min_lr_ratio is None:
-            none_list.append('min_lr_ratio')
+            none_list.append("min_lr_ratio")
 
         if none_list:
             raise ValueError(
@@ -127,11 +149,11 @@ def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:
             )
 
     dev_utils.type_check(
-        ("optimizer"    , optimizer     , optim.Optimizer),
-        ("max_steps"    , max_steps     , int),
-        ("warmup_ratio" , warmup_ratio  , float|int),
-        ("min_lr_ratio" , min_lr_ratio  , float|int),
-        func_name="build_scheduler()"
+        ("optimizer", optimizer, optim.Optimizer),
+        ("max_steps", max_steps, int),
+        ("warmup_ratio", warmup_ratio, float | int),
+        ("min_lr_ratio", min_lr_ratio, float | int),
+        func_name="build_scheduler()",
     )
 
     if max_steps <= 0:
@@ -144,7 +166,7 @@ def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:
         raise ValueError("<build_scheduler()> min_lr_ratio는 [0, 1]의 실수여야 합니다.")
 
     warmup_steps = int(max_steps * warmup_ratio)
-    decay_steps  = max(max_steps - warmup_steps, 1)
+    decay_steps = max(max_steps - warmup_steps, 1)
 
     def lr_lambda(step: int) -> float:
         if warmup_steps > 0 and step < warmup_steps:
@@ -157,27 +179,22 @@ def build_scheduler(optimizer:optim.Optimizer, max_steps:int=None, warmup_ratio:
 
         return min_lr_ratio + (1.0 - min_lr_ratio) * cosine
 
-    return torch.optim.lr_scheduler.LambdaLR(
-        optimizer,
-        lr_lambda=lr_lambda
-    )
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
-def load_dtype(name:str)->torch.dtype:
-    if name.startswith('torch.'):
+
+def load_dtype(name: str) -> torch.dtype:
+    if name.startswith("torch."):
         name = name[6:]
     dtype_map = {
-        'bf16':torch.bfloat16,
-        'bfloat16':torch.bfloat16,
-
-        'fp16':torch.float16,
-        'float16':torch.float16,
-
-        'fp32':torch.float32,
-        'float32':torch.float32,
-        
-        'half':torch.half,
-        'float':torch.float,
-        'double':torch.double
+        "bf16": torch.bfloat16,
+        "bfloat16": torch.bfloat16,
+        "fp16": torch.float16,
+        "float16": torch.float16,
+        "fp32": torch.float32,
+        "float32": torch.float32,
+        "half": torch.half,
+        "float": torch.float,
+        "double": torch.double,
     }
     if name in dtype_map:
         return dtype_map[name]
@@ -187,22 +204,23 @@ def load_dtype(name:str)->torch.dtype:
             f"<load_dtype()> {name}에 해당하는 torch의 dtype이 존재하지 않습니다."
         )
     if not isinstance(dtype, torch.dtype):
-        raise ValueError(
-            f"<load_dtype()> {name}은 torch의 dtype 인스턴스가 아닙니다."
-        )
-    
+        raise ValueError(f"<load_dtype()> {name}은 torch의 dtype 인스턴스가 아닙니다.")
+
     return dtype
 
 
-def _quantize(x:Tensor, dtype, method) -> tuple[Literal[False],Tensor] | tuple[Literal[True],Tensor,Tensor]:
+def _quantize(
+    x: Tensor, dtype, method
+) -> tuple[Literal[False], Tensor] | tuple[Literal[True], Tensor, Tensor]:
     if "float8" in str(dtype):
         match method:
-            case 'per-tensor':
-                scale = (x.abs().amax()/448.0).clamp_min(1e-12)
-                quantized = (x/scale).to(dtype=dtype)
-                return True,quantized,scale
+            case "per-tensor":
+                scale = (x.abs().amax() / 448.0).clamp_min(1e-12)
+                quantized = (x / scale).to(dtype=dtype)
+                return True, quantized, scale
 
-    return False,x.to(dtype=dtype)
+    return False, x.to(dtype=dtype)
+
 
 def _save_for_backward_debug(dtype, method, allowed_quantize_methods):
     if not isinstance(dtype, torch.dtype):
@@ -212,15 +230,17 @@ def _save_for_backward_debug(dtype, method, allowed_quantize_methods):
         )
 
     if method not in allowed_quantize_methods:
-            raise ValueError(
-                "<save_for_backward()._quantize()._quantize_debug()> configs/runtime.py의 ACTIVATION_QUANTIZE_METHOD 설정이 잘못되었습니다."
-                f" 현재: {rt.ACTIVATION_QUANTIZE_METHOD}, 허용되는 값: {allowed_quantize_methods}"
-            )
+        raise ValueError(
+            "<save_for_backward()._quantize()._quantize_debug()> configs/runtime.py의 ACTIVATION_QUANTIZE_METHOD 설정이 잘못되었습니다."
+            f" 현재: {rt.ACTIVATION_QUANTIZE_METHOD}, 허용되는 값: {allowed_quantize_methods}"
+        )
+
+
 def save_for_backward(ctx, *args):
     dtype = rt.ACTIVATION_SAVE_DTYPE
     method = rt.ACTIVATION_QUANTIZE_METHOD
-    allowed_quantize_methods= [
-        'per-tensor',
+    allowed_quantize_methods = [
+        "per-tensor",
     ]
 
     if rt.DEBUG_CHECKS == True:
@@ -236,44 +256,45 @@ def save_for_backward(ctx, *args):
     ctx.tensors_length = len(quantized_tensors)
     ctx.save_for_backward(*quantized_tensors, *scales)
 
-def dequantize(ctx, dtype=torch.dtype) -> list[Tensor]:
+
+def saved_tensors(ctx, dtype:torch.dtype) -> list[Tensor]:
     quantized = ctx.saved_tensors
-    quantized_tensors = quantized[:ctx.tensors_length]
-    scales = quantized[ctx.tensors_length:]
+    quantized_tensors = quantized[: ctx.tensors_length]
+    scales = quantized[ctx.tensors_length :]
 
     if scales:
         dequantized_tensors = []
         for tensor, scale in zip(quantized_tensors, scales):
-            dequantized_tensors.append(tensor.to(dtype=dtype)*scale)
+            dequantized_tensors.append(tensor.to(dtype=dtype) * scale)
     else:
         dequantized_tensors = [tensor.to(dtype=dtype) for tensor in quantized_tensors]
-    
+
     return dequantized_tensors
 
+
 @overload
-def build_loss_fn(name:str, cfg:DictConfig|dict):
-    '''
+def build_loss_fn(name: str, cfg: DictConfig | dict):
+    """
     cfg = {
         "name": N,
         N : ...
     }
-    '''
+    """
     ...
+
+
 @overload
-def build_loss_fn(name, *args, **kwargs):...
-def build_loss_fn(name, *args, cfg:DictConfig|dict=None, **kwargs):
+def build_loss_fn(name, *args, **kwargs): ...
+def build_loss_fn(name, *args, cfg: DictConfig | dict = None, **kwargs):
     func_name = "build_loss_fn()"
 
-    dev_utils.type_check(
-        ("name", name, str),
-        func_name=func_name
-    )
+    dev_utils.type_check(("name", name, str), func_name=func_name)
     loss_fn_cls = torch.nn.__dict__.get(name, None)
     if loss_fn_cls is not None:
         if not (
-            isinstance(loss_fn_cls,type) 
+            isinstance(loss_fn_cls, type)
             and issubclass(loss_fn_cls, torch.nn.Module)
-            and 'loss' in name.lower()
+            and "loss" in name.lower()
         ):
             raise ValueError(
                 f"<{func_name}> name={name}은 torch.nn의 손실함수 클래스가 아닙니다."
@@ -282,69 +303,80 @@ def build_loss_fn(name, *args, cfg:DictConfig|dict=None, **kwargs):
         raise ValueError(
             f"<{func_name}> torch.nn에 name= {name}에 해당하는 객체/클래스/모듈이 존재하지 않습니다."
         )
-    
-    if isinstance(args[0], DictConfig|dict):
+
+    if isinstance(args[0], DictConfig | dict):
         cfg = args[0]
         args = args[1:]
 
     if cfg is not None:
-        dev_utils.type_check(
-            ("cfg", cfg, DictConfig|dict),
-            func_name=func_name
-        )
+        dev_utils.type_check(("cfg", cfg, DictConfig | dict), func_name=func_name)
         _kwargs = kwargs
         kwargs = cfg.get(name, None)
         kwargs.update(_kwargs)
     return loss_fn_cls(*args, **kwargs)
 
 
-def _resolve_llm_init_cfg(original_cfg:DictConfig, cfg:DictConfig):
-    if 'method' in cfg:
-        if cfg.method == 'residual_std':
-            if 'std' not in cfg:
+def _resolve_llm_init_cfg(original_cfg: DictConfig, cfg: DictConfig):
+    if "method" in cfg:
+        if cfg.method == "residual_std":
+            if "std" not in cfg:
                 raise ValueError(
                     "<resolve_llm_cfg()._resolve_llm_init_cfg()> residual_std 초기화 방식에는 'std' 설정도 필요합니다."
                 )
-            cfg.method = 'normal'
+            cfg.method = "normal"
             cfg.std = cfg.std / math.sqrt(2 * original_cfg.model.num_layers)
         return
-    
+
     for value in cfg.values():
         if isinstance(value, DictConfig):
             _resolve_llm_init_cfg(original_cfg, value)
 
-def resolve_llm_cfg(cfg:DictConfig):
+
+def resolve_llm_cfg(cfg: DictConfig):
     if isinstance(cfg.dataset.total_tokens, str):
-        cfg.dataset.total_tokens = total_tokens = dev_utils.str_to_num(cfg.dataset.total_tokens)
+        cfg.dataset.total_tokens = total_tokens = dev_utils.str_to_num(
+            cfg.dataset.total_tokens
+        )
     if isinstance(cfg.dataset.validation_tokens, str):
-        cfg.dataset.validation_tokens = val_tokens = dev_utils.str_to_num(cfg.dataset.validation_tokens)
-    
+        cfg.dataset.validation_tokens = val_tokens = dev_utils.str_to_num(
+            cfg.dataset.validation_tokens
+        )
+
     if cfg.train.validation == None:
-        cfg.train.validation = cfg.train.validation_interval>0
+        cfg.train.validation = cfg.train.validation_interval > 0
     if cfg.train.max_steps == 0 or cfg.train.max_steps is None:
-        cfg.train.max_steps = int(total_tokens//(cfg.model.max_seq_len*cfg.train.batch_size*cfg.optimizer.grad_accumulation))
-    if total_tokens%(cfg.model.max_seq_len*cfg.train.batch_size) != 0:
-        print(f"<resolve_llm_cfg()> 현재 total_tokens= {dev_utils.num_to_str(total_tokens)}가 seq_len*batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다.")
+        cfg.train.max_steps = int(
+            total_tokens
+            // (
+                cfg.model.max_seq_len
+                * cfg.train.batch_size
+                * cfg.optimizer.grad_accumulation
+            )
+        )
+    if total_tokens % (cfg.model.max_seq_len * cfg.train.batch_size) != 0:
+        print(
+            f"<resolve_llm_cfg()> 현재 total_tokens= {dev_utils.num_to_str(total_tokens)}가 seq_len*batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다."
+        )
         total_tokens = int(
-            (
-                total_tokens
-                //(cfg.model.max_seq_len*cfg.train.batch_size)
-            )
-            *(cfg.model.max_seq_len*cfg.train.batch_size)
+            (total_tokens // (cfg.model.max_seq_len * cfg.train.batch_size))
+            * (cfg.model.max_seq_len * cfg.train.batch_size)
         )
-        print(f"total_tokens를 {total_tokens}(≈{dev_utils.num_to_str(total_tokens)})로 재설정합니다.")
+        print(
+            f"total_tokens를 {total_tokens}(≈{dev_utils.num_to_str(total_tokens)})로 재설정합니다."
+        )
         cfg.dataset.total_tokens = total_tokens
-    
-    if val_tokens%(cfg.model.max_seq_len*cfg.validation.batch_size) != 0:
-        print(f"<resolve_llm_cfg()> 현재 validation_tokens= {dev_utils.num_to_str(val_tokens)}가 seq_len*validation_batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다.")
-        val_tokens = int(
-            (
-                val_tokens
-                //(cfg.model.max_seq_len*cfg.train.batch_size)
-            )
-            *(cfg.model.max_seq_len*cfg.train.batch_size)
+
+    if val_tokens % (cfg.model.max_seq_len * cfg.validation.batch_size) != 0:
+        print(
+            f"<resolve_llm_cfg()> 현재 validation_tokens= {dev_utils.num_to_str(val_tokens)}가 seq_len*validation_batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다."
         )
-        print(f"validation_tokens를 {val_tokens}(≈{dev_utils.num_to_str(val_tokens)})로 재설정합니다.")
+        val_tokens = int(
+            (val_tokens // (cfg.model.max_seq_len * cfg.train.batch_size))
+            * (cfg.model.max_seq_len * cfg.train.batch_size)
+        )
+        print(
+            f"validation_tokens를 {val_tokens}(≈{dev_utils.num_to_str(val_tokens)})로 재설정합니다."
+        )
         cfg.dataset.validation_tokens = val_tokens
 
     _resolve_llm_init_cfg(cfg, cfg.init)
