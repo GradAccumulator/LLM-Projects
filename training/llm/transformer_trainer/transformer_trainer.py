@@ -28,6 +28,7 @@ class TransformerTrainer:
         scheduler: torch.optim.lr_scheduler.LRScheduler,
         loss_fn: nn.Module,
         cfg: DictConfig | dict,
+        *,
         tokenizer: Tokenizer = None,
         loggers: LoggerList = None,
     ): ...
@@ -63,7 +64,7 @@ class TransformerTrainer:
         scheduler: torch.optim.lr_scheduler.LRScheduler,
         loss_fn: nn.Module,
         log_interval: int | DictConfig | dict,
-        max_steps: int,
+        max_steps: int = None,
         tokenizer: Tokenizer = None,
         loggers: LoggerList = None,
         precision: str = "fp32",
@@ -94,6 +95,7 @@ class TransformerTrainer:
         self.valset_loader = dataloaders[1]
         self.tokenizer = tokenizer
         self.loggers = loggers or LoggerList()
+        torch.tensor().tol
 
         if isinstance(cfg, DictConfig | dict) or isinstance(
             log_interval, DictConfig | dict

@@ -5,3 +5,4 @@ outputs/
 *.txt
 *.bin
 *.jsonl
+**/tb_logs/

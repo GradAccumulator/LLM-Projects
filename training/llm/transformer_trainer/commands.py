@@ -15,14 +15,14 @@ class TrainingCommand(ABC):
 
 class CancelTrainingCommand(TrainingCommand):
     def execute(self, trainer):
-        trainer.cancel_training()
+        return trainer.cancel_training()
 
 
 class ValidateCommand(TrainingCommand):
     def execute(self, trainer):
-        trainer.validate()
+        return trainer.validate()
 
 
 class BreakpointCommand(TrainingCommand):
     def execute(self, trainer):
-        trainer.stop_train()
+        return trainer.stop_train()

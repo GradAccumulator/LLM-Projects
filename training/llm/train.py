@@ -12,43 +12,14 @@ from tokenizer import Tokenizer
 from models import Transformer
 from .transformer_trainer import TransformerTrainer
 from processing_datasets import LLMDataset
-from utils.logging import HWLogger, JsonlLogger, TerminalLogger, TxtLogger, LoggerList
-
-
-def build_dataloaders(cfg):
-    dataset_dir = Path(__file__).resolve().parent.parent.parent / "datasets"
-    train_dataset = LLMDataset(
-        cfg.model.max_seq_len,
-        datasets_dir=dataset_dir,
-        dataset_name=cfg.dataset.name,
-        total_tokens=cfg.dataset.total_tokens,
-        dataset_type="train",
-        bin_dtype=nn_utils.load_dtype(cfg.dataset.bin_dtype),
-    )
-    val_dataset = LLMDataset(
-        cfg.model.max_seq_len,
-        datasets_dir=dataset_dir,
-        dataset_name=cfg.dataset.name,
-        total_tokens=cfg.dataset.validation_tokens,
-        dataset_type="test",
-        bin_dtype=nn_utils.load_dtype(cfg.dataset.bin_dtype),
-    )
-
-    train_loader = data.DataLoader(
-        train_dataset,
-        batch_size=cfg.train.batch_size,
-        shuffle=True,
-        num_workers=0,
-        pin_memory=True,
-    )
-    val_loader = data.DataLoader(
-        val_dataset,
-        batch_size=cfg.validation.batch_size,
-        shuffle=True,
-        num_workers=0,
-        pin_memory=True,
-    )
-    return train_loader, val_loader
+from utils.logging import (
+    HWLogger,
+    JsonlLogger,
+    TerminalLogger,
+    TxtLogger,
+    LoggerList,
+    TensorboardLogger,
+)
 
 
 def separate_decay_params(params: Iterable[nn.Parameter], weight_decay: float):
@@ -82,9 +53,10 @@ def load_loggers():
     log_dir = Path(__file__).parent.parent.parent / "logs"
     return LoggerList(
         HWLogger(log_dir / "hardware_logs", file_name=f"{model_name}", interval=5),
-        JsonlLogger(log_dir / "jsonl_logs", file_name=f"{model_name}"),
+        # JsonlLogger(log_dir / "jsonl_logs", file_name=f"{model_name}"),
         TerminalLogger(),
-        TxtLogger(log_dir / "txt_logs", file_name=f"{model_name}"),
+        # TxtLogger(log_dir / "txt_logs", file_name=f"{model_name}"),
+        TensorboardLogger(log_dir / "tb_logs", run_name=f"{model_name}"),
     )
 
 
@@ -103,7 +75,7 @@ def main(cfg):
     scheduler = nn_utils.build_scheduler(optimizer, cfg)
     loss_fn = nn_utils.build_loss_fn(cfg.loss.name, cfg.loss)
     tokenizer = Tokenizer(f"{vocab_size}k_" + cfg.dataset.name)
-    dataloaders = build_dataloaders(cfg)
+    dataloaders = nn_utils.build_dataloaders(cfg)
 
     trainer = TransformerTrainer(
         model,
@@ -112,7 +84,7 @@ def main(cfg):
         scheduler,
         loss_fn,
         cfg,
-        tokenizer,
+        tokenizer=tokenizer,
         loggers=load_loggers(),
     )
     trainer.train()

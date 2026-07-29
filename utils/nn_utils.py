@@ -1,13 +1,15 @@
 import math
 import torch
-import omegaconf
 import torch.optim as optim
+import torch.utils.data as data
+from pathlib import Path
 from typing import overload, Literal
-
 from . import dev_utils
 from torch import Tensor
 from omegaconf import DictConfig
+
 from configs import runtime as rt
+from processing_datasets import LLMDataset
 
 
 def init_parameter(*shape: int, init_cfg: DictConfig | dict):
@@ -257,7 +259,7 @@ def save_for_backward(ctx, *args):
     ctx.save_for_backward(*quantized_tensors, *scales)
 
 
-def saved_tensors(ctx, dtype:torch.dtype) -> list[Tensor]:
+def saved_tensors(ctx, dtype: torch.dtype) -> list[Tensor]:
     quantized = ctx.saved_tensors
     quantized_tensors = quantized[: ctx.tensors_length]
     scales = quantized[ctx.tensors_length :]
@@ -380,3 +382,39 @@ def resolve_llm_cfg(cfg: DictConfig):
         cfg.dataset.validation_tokens = val_tokens
 
     _resolve_llm_init_cfg(cfg, cfg.init)
+
+
+def build_dataloaders(cfg):
+    dataset_dir = Path(__file__).parent.parent / "datasets"
+    train_dataset = LLMDataset(
+        cfg.model.max_seq_len,
+        datasets_dir=dataset_dir,
+        dataset_name=cfg.dataset.name,
+        total_tokens=cfg.dataset.total_tokens,
+        dataset_type="train",
+        bin_dtype=load_dtype(cfg.dataset.bin_dtype),
+    )
+    val_dataset = LLMDataset(
+        cfg.model.max_seq_len,
+        datasets_dir=dataset_dir,
+        dataset_name=cfg.dataset.name,
+        total_tokens=cfg.dataset.validation_tokens,
+        dataset_type="test",
+        bin_dtype=load_dtype(cfg.dataset.bin_dtype),
+    )
+
+    train_loader = data.DataLoader(
+        train_dataset,
+        batch_size=cfg.train.batch_size,
+        shuffle=True,
+        num_workers=0,
+        pin_memory=True,
+    )
+    val_loader = data.DataLoader(
+        val_dataset,
+        batch_size=cfg.validation.batch_size,
+        shuffle=True,
+        num_workers=0,
+        pin_memory=True,
+    )
+    return train_loader, val_loader

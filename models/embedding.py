@@ -42,7 +42,9 @@ class Embedding(nn.Module):
             func_name=func_name,
         )
 
-        self._weight = nn_utils.init_parameter(num_embeddings, embed_dim, init_cfg=init_cfg)
+        self._weight = nn_utils.init_parameter(
+            num_embeddings, embed_dim, init_cfg=init_cfg
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         # x.shape == (B, T)
