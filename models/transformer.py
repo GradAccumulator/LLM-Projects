@@ -24,16 +24,18 @@ class Transformer(nn.Module):
                 "max_seq_len": int,
                 "num_layers": int,
                 "embed_dim": int,
-                "num_heads": int,
                 "ffn_dim": int,
                 "dropout": float|int,
                 "bias": bool,
                 "attention": {
+                    "use_rope":bool,
                     "positional_embedding": Literal["rope", "learnable"],
                     "dropout": float|int,
                     "RoPE": {
                         "base": int|float
-                    }
+                    },
+                    "num_kv_heads":int,
+                    "num_q_heads":int,
                 }
             },
             "init" : {
@@ -100,9 +102,10 @@ class Transformer(nn.Module):
         self,
         vocab_size: int,
         num_layers: int,
-        num_heads: int,
+        num_kv_heads: int,
         embed_dim: int,
         ffn_dim: int,
+        num_q_heads: int | None = None,
         dropout: float | int = 0.0,
         attn_dropout: float | int = None,
         max_seq_len: int = None,
@@ -178,7 +181,8 @@ class Transformer(nn.Module):
         self,
         vocab_size: int,
         num_layers: int = None,
-        num_heads: int = None,
+        num_kv_heads: int = None,
+        num_q_heads: int = None,
         embed_dim: int = None,
         ffn_dim: int = None,
         dropout: float | int = 0.0,
@@ -262,14 +266,15 @@ class Transformer(nn.Module):
 
             vocab_size = model_cfg.vocab_size
             num_layers = model_cfg.num_layers
-            num_heads = model_cfg.num_heads
-            embed_dim = model_cfg.embed_dim if model_cfg.embed_dim != None else None
+            num_kv_heads = model_cfg.attention.num_kv_heads
+            num_q_heads = model_cfg.attention.num_q_heads
+            embed_dim = model_cfg.embed_dim
             dropout = model_cfg.dropout
             max_seq_len = model_cfg.max_seq_len
 
             ffn = model_cfg.ffn.type
             activation = model_cfg.ffn.activation
-            ffn_dim = model_cfg.ffn.dim if model_cfg.ffn.dim != None else None
+            ffn_dim = model_cfg.ffn.dim
             ffn_bias = model_cfg.ffn.bias
 
             use_RoPE = model_cfg.attention.use_rope
@@ -283,7 +288,8 @@ class Transformer(nn.Module):
         func_name = "Transformer.__init__()"
         dev_utils.type_check(
             ("num_layers", num_layers, int),
-            ("num_heads", num_heads, int),
+            ("num_kv_heads", num_kv_heads, int),
+            ("num_q_heads", num_q_heads, int | None),
             ("vocab_size", vocab_size, int),
             ("norm_eps", norm_eps, float),
             ("ffn_bias", ffn_bias, bool),
@@ -315,7 +321,10 @@ class Transformer(nn.Module):
             func_name=func_name,
         )
         if embed_dim is None:
-            embed_dim = num_heads * 64
+            if num_q_heads is not None:
+                embed_dim = num_q_heads * 64
+            else:
+                embed_dim = num_kv_heads * 64
         if ffn_dim is None:
             if ffn.lower() == "swiglu":
                 ffn_dim = int(embed_dim * 8 / 3)
@@ -327,7 +336,8 @@ class Transformer(nn.Module):
             [
                 TransformerBlock(
                     embed_dim=embed_dim,
-                    num_heads=num_heads,
+                    num_kv_heads=num_kv_heads,
+                    num_q_heads=num_q_heads,
                     ffn_dim=ffn_dim,
                     dropout=dropout,
                     attn_dropout=attn_dropout,
@@ -356,9 +366,7 @@ class Transformer(nn.Module):
                 raise ValueError(
                     "<Transformer.__init__()> max_seq_len은 learnable positional embedding을 사용할 경우 필수입니다."
                 )
-            self._pos_embedding = Embedding(
-                max_seq_len, embed_dim, init_cfg=init_cfg.pos_embedding
-            )
+            self._pos_embedding = Embedding(max_seq_len, embed_dim, init_cfg=init_cfg.pos_embedding)
 
         self.cached_causal_mask: Tensor
 
@@ -368,30 +376,18 @@ class Transformer(nn.Module):
         device = x.device
         dtype = torch.get_autocast_dtype(device.type)
 
-        if not hasattr(self, "cached_causal_mask") or self.cached_causal_mask.shape != (
-            T,
-            T,
-        ):
+        if not hasattr(self, "cached_causal_mask") or self.cached_causal_mask.shape != (T, T):
             self.register_buffer(
                 "cached_causal_mask",
                 MultiHeadAttention.make_causal_mask(T, device),
                 persistent=False,
             )
 
-        need_new_cached_sin_cos = not hasattr(
-            self, "cached_sin"
-        ) or self.cached_sin.shape != (T, self.embed_dim // 2)
-        if rt.DEBUG_CHECKS:
-            need_new_cached_sin_cos = need_new_cached_sin_cos or (
-                not hasattr(self, "cached_cos")
-                or self.cached_cos.shape != (T, self.embed_dim // 2)
-            )
+        need_new_cached_sin_cos = not (hasattr(self, "cached_sin") and self.cached_sin.shape == (T, self.d_head // 2))
         if need_new_cached_sin_cos:
             if self.use_RoPE:
                 rope: RoPE = self.transformer_blocks[0].attention.RoPE
-                sin, cos = RoPE.compute_sin_cos(
-                    T, self.d_head, device, dtype, rope.base
-                )
+                sin, cos = RoPE.compute_sin_cos(T, self.d_head, device, dtype, rope.base)
                 self.register_buffer("cached_sin", sin, persistent=False)
                 self.register_buffer("cached_cos", cos, persistent=False)
 
@@ -431,7 +427,7 @@ class Transformer(nn.Module):
 
     @property
     def d_head(self):
-        return self.embed_dim // self.num_heads
+        return self.transformer_blocks[0].attention.d_head
 
     @property
     def ffn_dim(self):
@@ -454,8 +450,12 @@ class Transformer(nn.Module):
         return self.embedding.embed_dim
 
     @property
-    def num_heads(self):
-        return self.transformer_blocks[0].num_heads
+    def num_kv_heads(self):
+        return self.transformer_blocks[0].num_kv_heads
+
+    @property
+    def num_q_heads(self):
+        return self.transformer_blocks[0].num_q_heads
 
     @property
     def dropout_p(self):

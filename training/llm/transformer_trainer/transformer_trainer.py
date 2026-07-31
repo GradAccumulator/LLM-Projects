@@ -95,7 +95,6 @@ class TransformerTrainer:
         self.valset_loader = dataloaders[1]
         self.tokenizer = tokenizer
         self.loggers = loggers or LoggerList()
-        torch.tensor().tol
 
         if isinstance(cfg, DictConfig | dict) or isinstance(
             log_interval, DictConfig | dict

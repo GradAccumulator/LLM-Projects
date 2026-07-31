@@ -1,7 +1,6 @@
 model:
   vocab_size : 32000
   num_layers : 24
-  num_heads  : 30
   embed_dim  : null
   dropout    : 0.0
   max_seq_len: 1024
@@ -16,6 +15,8 @@ model:
     rope:
       base: 10000
     bias: false
+    num_kv_heads: 15
+    num_q_heads: 30
   layernorm:
     bias: true
     eps : 1.0e-5
@@ -35,7 +36,7 @@ validation:
 
 dataset:
   name: fineweb2_korean
-  total_tokens: 8B
+  train_tokens: 8B
   validation_tokens: 2M
   bin_dtype: uint16
 

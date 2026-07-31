@@ -335,9 +335,9 @@ def _resolve_llm_init_cfg(original_cfg: DictConfig, cfg: DictConfig):
 
 
 def resolve_llm_cfg(cfg: DictConfig):
-    if isinstance(cfg.dataset.total_tokens, str):
-        cfg.dataset.total_tokens = total_tokens = dev_utils.str_to_num(
-            cfg.dataset.total_tokens
+    if isinstance(cfg.dataset.train_tokens, str):
+        cfg.dataset.train_tokens = train_tokens = dev_utils.str_to_num(
+            cfg.dataset.train_tokens
         )
     if isinstance(cfg.dataset.validation_tokens, str):
         cfg.dataset.validation_tokens = val_tokens = dev_utils.str_to_num(
@@ -348,25 +348,25 @@ def resolve_llm_cfg(cfg: DictConfig):
         cfg.train.validation = cfg.train.validation_interval > 0
     if cfg.train.max_steps == 0 or cfg.train.max_steps is None:
         cfg.train.max_steps = int(
-            total_tokens
+            train_tokens
             // (
                 cfg.model.max_seq_len
                 * cfg.train.batch_size
                 * cfg.optimizer.grad_accumulation
             )
         )
-    if total_tokens % (cfg.model.max_seq_len * cfg.train.batch_size) != 0:
+    if train_tokens % (cfg.model.max_seq_len * cfg.train.batch_size) != 0:
         print(
-            f"<resolve_llm_cfg()> 현재 total_tokens= {dev_utils.num_to_str(total_tokens)}가 seq_len*batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다."
+            f"<resolve_llm_cfg()> 현재 train_tokens= {dev_utils.num_to_str(train_tokens)}가 seq_len*batch_size= {cfg.model.max_seq_len*cfg.train.batch_size}와 나누어 떨어지지 않습니다."
         )
-        total_tokens = int(
-            (total_tokens // (cfg.model.max_seq_len * cfg.train.batch_size))
+        train_tokens = int(
+            (train_tokens // (cfg.model.max_seq_len * cfg.train.batch_size))
             * (cfg.model.max_seq_len * cfg.train.batch_size)
         )
         print(
-            f"total_tokens를 {total_tokens}(≈{dev_utils.num_to_str(total_tokens)})로 재설정합니다."
+            f"train_tokens를 {train_tokens}(≈{dev_utils.num_to_str(train_tokens)})로 재설정합니다."
         )
-        cfg.dataset.total_tokens = total_tokens
+        cfg.dataset.train_tokens = train_tokens
 
     if val_tokens % (cfg.model.max_seq_len * cfg.validation.batch_size) != 0:
         print(
@@ -390,7 +390,7 @@ def build_dataloaders(cfg):
         cfg.model.max_seq_len,
         datasets_dir=dataset_dir,
         dataset_name=cfg.dataset.name,
-        total_tokens=cfg.dataset.total_tokens,
+        total_tokens=cfg.dataset.train_tokens,
         dataset_type="train",
         bin_dtype=load_dtype(cfg.dataset.bin_dtype),
     )

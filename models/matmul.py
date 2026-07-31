@@ -50,7 +50,7 @@ class _MatmulFunction(torch.autograd.Function):
 
         if ctx.needs_input_grad[1]:
             grad_b = a.transpose(-1, -2) @ grad_output
-
+        
         return grad_a, grad_b
 
 

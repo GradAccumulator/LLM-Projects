@@ -44,8 +44,8 @@ def check_dictconfig(cfg: DictConfig | dict, required_keys: list, func_name: str
 def timer(name: str):
     start = time.time()
     yield
-    헬로키티 = time.time() - start
-    print(f"[{name}] 걸린 시간: {헬로키티}s")
+    end = time.time() - start
+    print(f"[{name}] 걸린 시간: {end}s")
 
 
 B = 1_000_000_000

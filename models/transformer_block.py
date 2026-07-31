@@ -14,7 +14,7 @@ class TransformerBlock(nn.Module):
     def __init__(
         self,
         embed_dim: int,
-        num_heads: int,
+        num_kv_heads: int,
         ffn_dim: int,
         dropout: float | int,
         attn_dropout: float | int = None,
@@ -23,10 +23,11 @@ class TransformerBlock(nn.Module):
         attn_bias: bool = False,
         norm_bias: bool = True,
         use_RoPE: bool = True,
-        RoPE_base: int | float = None,
+        RoPE_base: int | float |None = None,
         ffn: Literal["swiglu", "mlp"] = "swiglu",
         activation: str = "silu",
-        init_cfg: DictConfig | dict = None,
+        num_q_heads:int|None = None,
+        init_cfg: DictConfig | dict|None = None,
     ):
         """```
         init_cfg = {
@@ -81,7 +82,8 @@ class TransformerBlock(nn.Module):
         dev_utils.type_check(
             ("activation", activation, str),
             ("embed_dim", embed_dim, int),
-            ("num_heads", num_heads, int),
+            ("num_kv_heads", num_kv_heads, int),
+            ("num_q_heads", num_q_heads, int|None),
             ("ffn_dim", ffn_dim, int),
             ("ffn_bias", ffn_bias, bool),
             ("attn_bias", attn_bias, bool),
@@ -113,11 +115,12 @@ class TransformerBlock(nn.Module):
         )
         self.attention = MultiHeadAttention(
             embed_dim,
-            num_heads,
+            num_kv_heads,
             attn_dropout,
             bias=attn_bias,
             use_RoPE=use_RoPE,
             RoPE_base=RoPE_base,
+            num_q_heads=num_q_heads,
             init_cfg=init_cfg.attention,
         )
         self._dropout = Dropout(dropout)
@@ -190,8 +193,8 @@ class TransformerBlock(nn.Module):
         return self.ln1.normalized_shape[-1]
 
     @property
-    def num_heads(self):
-        return self.attention.num_heads
+    def num_kv_heads(self):
+        return self.attention.num_kv_heads
 
     @property
     def dropout_p(self):

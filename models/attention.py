@@ -15,12 +15,13 @@ class MultiHeadAttention(nn.Module):
     def __init__(
         self,
         embed_dim: int,
-        num_heads: int,
+        num_kv_heads: int,
         dropout: float | int,
-        init_cfg: DictConfig | dict = None,
+        init_cfg: DictConfig | dict | None = None,
         bias: bool = False,
         use_RoPE: bool = True,
-        RoPE_base: int | float = None,
+        RoPE_base: int | float | None = None,
+        num_q_heads: int | None = None,
     ):
         """```
         init_cfg = {
@@ -46,7 +47,8 @@ class MultiHeadAttention(nn.Module):
         func_name = "MultiHeadAttention.__init__()"
         dev_utils.type_check(
             ("embed_dim", embed_dim, int),
-            ("num_heads", num_heads, int),
+            ("num_kv_heads", num_kv_heads, int),
+            ("num_q_heads", num_q_heads, int | None),
             ("bias", bias, bool),
             ("use_RoPE", use_RoPE, bool),
             ("dropout", dropout, float | int),
@@ -54,33 +56,48 @@ class MultiHeadAttention(nn.Module):
             ("init_cfg", init_cfg, DictConfig | dict | None),
             func_name=func_name,
         )
-        if embed_dim % num_heads != 0:
-            raise ValueError(
-                f"<{func_name}> embed_dim은 num_heads와 나누어 떨어져야 합니다."
-            )
+        self._use_gqa = num_q_heads is not None
+        if not self.use_gqa:
+            if embed_dim % num_kv_heads != 0:
+                raise ValueError(f"<{func_name}> embed_dim은 num_kv_heads와 나누어 떨어져야 합니다.")
+            num_q_heads = num_kv_heads
+        elif self.use_gqa and (embed_dim % num_q_heads != 0):
+                raise ValueError(f"<{func_name}> embed_dim은 num_q_heads와 나누어 떨어져야 합니다.")
+        
         if not 0 <= dropout < 1:
-            raise ValueError(
-                f"<{func_name}> dropout p는 반드시 [0, 1) 범위의 실수여야 합니다."
-            )
+            raise ValueError(f"<{func_name}> dropout p는 반드시 [0, 1) 범위의 실수여야 합니다.")
 
-        self._num_heads = num_heads
-        self._d_head = embed_dim // num_heads
+        self._num_kv_heads = num_kv_heads
+        self._num_q_heads = num_q_heads
+        self._d_head = embed_dim // num_q_heads
 
-        init_cfg = dev_utils.make_dictconfig(
-            init_cfg, default={"qkv_linear": None, "out_linear": None}
-        )
+        if self.num_q_heads % self.num_kv_heads != 0:
+            raise ValueError(f"<{func_name}> num_q_heads값이 num_kv_heads값으로 나누어 떨어지지 않습니다.")
+        if self.num_q_heads < self.num_kv_heads:
+            raise ValueError(f"<{func_name}> num_kv_heads값은 num_q_heads값보다 클 수 없습니다.")
+
+        init_cfg = dev_utils.make_dictconfig(init_cfg, default={"qkv_linear": None, "out_linear": None})
         dev_utils.check_dictconfig(
             init_cfg,
             ("qkv_linear", "out_linear"),
             func_name=func_name,
         )
-
-        self.qkv_linear = Linear(
-            embed_dim, embed_dim * 3, init_cfg=init_cfg.qkv_linear, use_bias=bias
-        )
-        self.out_linear = Linear(
-            embed_dim, embed_dim, init_cfg=init_cfg.out_linear, use_bias=bias
-        )
+        if not self.use_gqa:
+            self.qkv_linear = Linear(embed_dim, embed_dim * 3, init_cfg=init_cfg.qkv_linear, use_bias=bias)
+        else:
+            self.kv_linear = Linear(
+                embed_dim,
+                self.d_head * self.num_kv_heads * 2,
+                init_cfg=init_cfg.qkv_linear,
+                use_bias=bias,
+            )
+            self.q_linear = Linear(
+                embed_dim,
+                embed_dim,
+                init_cfg=init_cfg.qkv_linear,
+                use_bias=bias,
+            )
+        self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.out_linear, use_bias=bias)
         self.softmax = Softmax(dim=-1)
         self.dropout = Dropout(dropout)
         self._use_bias = bias
@@ -95,14 +112,30 @@ class MultiHeadAttention(nn.Module):
         # x.shape == (B,T,D)
         B = x.size(0)
         T = x.size(1)
-        QKV: Tensor = self.qkv_linear(x)
-        # QKV.shape == (B,T,D*3)
-        Q, K, V = QKV.chunk(3, dim=-1)
-        # Q,K,V shape == (B,T,D)
-        Q = Q.reshape(B, T, self.num_heads, self.d_head).transpose(1, 2)
-        K = K.reshape(B, T, self.num_heads, self.d_head).transpose(1, 2)
-        V = V.reshape(B, T, self.num_heads, self.d_head).transpose(1, 2)
-        # Q, K, V shape == (B, H, T, D)
+        if not self.use_gqa:
+            QKV: Tensor = self.qkv_linear(x)
+            Q, K, V = QKV.chunk(3, dim=-1)
+
+            Q = Q.reshape(B, T, self.num_q_heads, self.d_head).transpose(1, 2)
+            K = K.reshape(B, T, self.num_kv_heads, self.d_head).transpose(1, 2)
+            V = V.reshape(B, T, self.num_kv_heads, self.d_head).transpose(1, 2)
+        else:
+            K, V = self.kv_linear(x).chunk(2, dim=-1)
+            Q: Tensor = self.q_linear(x)
+            Q = (
+                Q.reshape(B, T, self.num_q_heads, self.d_head)
+                .transpose(1, 2)
+                .reshape(
+                    B,
+                    self.num_q_heads // self.num_kv_heads,
+                    self.num_kv_heads,
+                    T,
+                    self.d_head,
+                )
+            )
+            
+            K = K.reshape(B, 1, T, self.num_kv_heads, self.d_head).transpose(2, 3)
+            V = V.reshape(B, 1, T, self.num_kv_heads, self.d_head).transpose(2, 3)
 
         return B, Q, K, V
 
@@ -110,20 +143,12 @@ class MultiHeadAttention(nn.Module):
     def make_causal_mask(T: int, device: torch.device) -> Tensor:
         return torch.triu(torch.ones(T, T, device=device, dtype=torch.bool), diagonal=1)
 
-    def _apply_mask(
-        self, scores: Tensor, T: int, device: torch.device, mask: Tensor = None
-    ) -> Tensor:
+    def _apply_mask(self, scores: Tensor, T: int, device: torch.device, mask: Tensor = None) -> Tensor:
         # scores.shape == (B,H,T,T)
-        need_new_mask = (mask is None) and not (
-            hasattr(self, "cached_mask") and self.cached_mask.shape == (T, T)
-        )
+        need_new_mask = (mask is None) and not (hasattr(self, "cached_mask") and self.cached_mask.shape == (T, T))
         if need_new_mask:
-            self.register_buffer(
-                "cached_mask", self.make_causal_mask(T, device), persistent=False
-            )
-        scores = scores.masked_fill(
-            mask if mask is not None else self.cached_mask, -float("inf")
-        )
+            self.register_buffer("cached_mask", self.make_causal_mask(T, device), persistent=False)
+        scores = scores.masked_fill(mask if mask is not None else self.cached_mask, -float("inf"))
 
         return scores
 
@@ -132,10 +157,10 @@ class MultiHeadAttention(nn.Module):
         weights = self.softmax(scores)
         drop = self.dropout(weights)
         out = matmul(drop, V)
-        # out.shape == (B, H, T, D)
+        if self.use_gqa:
+            # out.shape == (B,H_q//H_kv,H_kv, T, D)
+            out = out.reshape(B, self.num_q_heads, T, self.d_head)
         out = out.transpose(1, 2).reshape(B, T, self.embed_dim)
-        # out.shape == (B, T, D)
-
         return out
 
     def forward_debug(self, x: Tensor, mask: Tensor, T: int) -> Tensor:
@@ -201,8 +226,8 @@ class MultiHeadAttention(nn.Module):
         return self._use_bias
 
     @property
-    def num_heads(self):
-        return self._num_heads
+    def num_kv_heads(self):
+        return self._num_kv_heads
 
     @property
     def dropout_p(self):
@@ -210,7 +235,9 @@ class MultiHeadAttention(nn.Module):
 
     @property
     def embed_dim(self):
-        return self.qkv_linear.in_features
+        if not self.use_gqa:
+            return self.qkv_linear.in_features
+        return self.kv_linear.in_features
 
     @property
     def RoPE_base(self):
@@ -218,3 +245,11 @@ class MultiHeadAttention(nn.Module):
             return self.RoPE.base
         else:
             return None
+
+    @property
+    def num_q_heads(self):
+        return self._num_q_heads
+
+    @property
+    def use_gqa(self):
+        return self._use_gqa

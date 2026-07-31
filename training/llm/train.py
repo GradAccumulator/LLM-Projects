@@ -53,7 +53,7 @@ def load_loggers():
     log_dir = Path(__file__).parent.parent.parent / "logs"
     return LoggerList(
         HWLogger(log_dir / "hardware_logs", file_name=f"{model_name}", interval=5),
-        # JsonlLogger(log_dir / "jsonl_logs", file_name=f"{model_name}"),
+        JsonlLogger(log_dir / "jsonl_logs", file_name=f"{model_name}"),
         TerminalLogger(),
         # TxtLogger(log_dir / "txt_logs", file_name=f"{model_name}"),
         TensorboardLogger(log_dir / "tb_logs", run_name=f"{model_name}"),
