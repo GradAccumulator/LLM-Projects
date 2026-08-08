@@ -201,7 +201,7 @@ class TransformerTrainer:
             event=TrainingEvent.VALIDATION_ENDED,
             trainer=self,
             loss=avg_loss,
-            ppl=math.exp(loss),
+            ppl=math.exp(avg_loss),
         )
         self._empty_cache()
         self.model.train()

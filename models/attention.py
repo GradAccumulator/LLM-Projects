@@ -127,15 +127,15 @@ class MultiHeadAttention(nn.Module):
                 .transpose(1, 2)
                 .reshape(
                     B,
-                    self.num_q_heads // self.num_kv_heads,
                     self.num_kv_heads,
+                    self.num_q_heads // self.num_kv_heads,
                     T,
                     self.d_head,
                 )
             )
             
-            K = K.reshape(B, 1, T, self.num_kv_heads, self.d_head).transpose(2, 3)
-            V = V.reshape(B, 1, T, self.num_kv_heads, self.d_head).transpose(2, 3)
+            K = K.reshape(B, T, self.num_kv_heads, self.d_head).transpose(1, 2).unsqueeze(2)
+            V = V.reshape(B, T, self.num_kv_heads, self.d_head).transpose(1, 2).unsqueeze(2)
 
         return B, Q, K, V
 
