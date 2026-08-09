@@ -129,8 +129,8 @@ class RoPE(nn.Module):
         self, Q: Tensor, K: Tensor, cached_sin: Tensor = None, cached_cos: Tensor = None
     ) -> tuple[Tensor, Tensor]:
         # Q, K.shape == (B, H, T, D)
-        T = Q.size(2)
-        D = Q.size(3)
+        T = Q.size(-2)
+        D = Q.size(-1)
 
         if D % 2 != 0:
             raise ValueError(
