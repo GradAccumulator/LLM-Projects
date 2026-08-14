@@ -383,7 +383,9 @@ class Transformer(nn.Module):
                 persistent=False,
             )
 
-        need_new_cached_sin_cos = not (hasattr(self, "cached_sin") and self.cached_sin.shape == (T, self.d_head // 2))
+        need_new_cached_sin_cos = not hasattr(self, "cached_sin") or (
+            self.cached_sin.shape != (T, self.d_head // 2) and self.cached_sin.size(-2) < T
+        )
         if need_new_cached_sin_cos:
             if self.use_RoPE:
                 rope: RoPE = self.transformer_blocks[0].attention.RoPE

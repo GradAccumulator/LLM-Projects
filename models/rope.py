@@ -75,13 +75,14 @@ class RoPE(nn.Module):
         cached_cos: Tensor = None,
     ) -> tuple[Tensor, Tensor]:
         cached_sin_cos_is_given = (cached_sin is not None) and (cached_cos is not None)
-        if cached_sin is None and hasattr(self, "cached_sin"):
+        if cached_sin is None and (hasattr(self, "cached_sin") and self.cached_sin is not None):
             cached_sin = self.cached_sin
-        if cached_cos is None and hasattr(self, "cached_cos"):
+        if cached_cos is None and (hasattr(self, "cached_cos") and self.cached_cos is not None):
             cached_cos = self.cached_cos
 
-        need_new_cache = (
+        need_new_cache =  (
             cached_sin.shape != (T, D // 2)
+            or cached_sin.size(-2) < T
             or cached_sin.device != device
             or cached_sin.dtype != dtype
         )
@@ -99,7 +100,7 @@ class RoPE(nn.Module):
         else:
             sin, cos = cached_sin, cached_cos
 
-        return sin, cos
+        return sin[:T], cos[:T]
 
     def _compute_sin_cos_fast(
         self,
@@ -120,9 +121,11 @@ class RoPE(nn.Module):
                 )
                 self.register_buffer("cached_sin", cached_sin, persistent=False)
                 self.register_buffer("cached_cos", cached_cos, persistent=False)
-        return cached_sin, cached_cos
+        return cached_sin[:T], cached_cos[:T]
 
     def _rotate(self, x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
+        #x.shape == (B,H,T,D)
+        #or x.shape == (B, H_q//H_kv, H_kv, T, D)
         return _RotateFunction.apply(x, sin, cos)
 
     def forward(

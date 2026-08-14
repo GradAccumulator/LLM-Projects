@@ -56,7 +56,7 @@ class MultiHeadAttention(nn.Module):
             ("init_cfg", init_cfg, DictConfig | dict | None),
             func_name=func_name,
         )
-        self._use_gqa = num_q_heads is not None
+        self._use_gqa = num_q_heads is not None and num_q_heads != num_kv_heads
         if not self.use_gqa:
             if embed_dim % num_kv_heads != 0:
                 raise ValueError(f"<{func_name}> embed_dim은 num_kv_heads와 나누어 떨어져야 합니다.")
@@ -163,7 +163,7 @@ class MultiHeadAttention(nn.Module):
         out = out.transpose(1, 2).reshape(B, T, self.embed_dim)
         return out
 
-    def forward_debug(self, x: Tensor, mask: Tensor, T: int) -> Tensor:
+    def forward_debug(self, x: Tensor, mask: Tensor, T: int, k_cache:Tensor, v_cache:Tensor, start_idx:int) -> Tensor:
         # x.shape == (B, T, D)
         # mask.shape == (T, T)
         func_name = "MultiHeadAttention.forward()"
@@ -181,6 +181,31 @@ class MultiHeadAttention(nn.Module):
                 f"<{func_name}> 입력 x의 마지막 차원은 embed_dim={self.embed_dim}이어야 합니다. "
                 f"현재 x.shape={tuple(x.shape)}"
             )
+        if torch.is_inference_mode_enabled():
+            if k_cache is None:
+                raise ValueError(
+                    f"<{func_name}> inference mode가 활성화 돼있을 때는 k_cache가 필요합니다."
+                )
+            if k_cache.shape[:-2] != (1,1,self.num_kv_heads) or k_cache.size(-1) != self.embed_dim:
+                raise ValueError(
+                    f"<{func_name}> k_cache의 shape가 부적절합니다."
+                    "\n예상 shape= (1, 1, H_kv, T_max, D), "
+                    f"현재 shape= {k_cache.shape}"
+                )
+            if v_cache is None:
+                raise ValueError(
+                    f"<{func_name}> inference mode가 활성화 돼있을 때는 v_cache가 필요합니다."
+                )
+            if v_cache.shape[:-2] != (1,1,self.num_kv_heads) or v_cache.size(-1) != self.embed_dim:
+                raise ValueError(
+                    f"<{func_name}> v_cache의 shape가 부적절합니다."
+                    "\n예상 shape= (1, 1, H_kv, T_max, D), "
+                    f"현재 shape= {v_cache.shape}"
+                )
+            if start_idx < 0 or not isinstance(start_idx, int):
+                raise ValueError(
+                    f"<{func_name}> start_idx는 0 이상의 정수여야 합니다."
+                )
 
     def forward(
         self,
@@ -188,12 +213,16 @@ class MultiHeadAttention(nn.Module):
         mask: Tensor = None,
         cached_sin: Tensor = None,
         cached_cos: Tensor = None,
+        k_cache: Tensor = None,
+        v_cache: Tensor = None,
+        start_idx:int = 0,
     ) -> Tensor:
         # x.shape == (B, T, D)
+        #k_cache,v_cache.sahpe == (1, 1, H_kv, T_max, D)
         device = x.device
         T = x.size(1)
         if rt.DEBUG_CHECKS:
-            self.forward_debug(x, mask, T)
+            self.forward_debug(x, mask, T, k_cache, v_cache, start_idx)
 
         B, Q, K, V = self._qkv_projection(x)
         # Q,K,V shape == (B, H, T, D)
@@ -201,8 +230,15 @@ class MultiHeadAttention(nn.Module):
         if self.use_RoPE:
             Q, K = self.RoPE(Q, K, cached_sin=cached_sin, cached_cos=cached_cos)
 
+        if torch.is_inference_mode_enabled():
+            k_cache[:, :, :, start_idx:start_idx+1, :] = K
+            v_cache[:, :, :, start_idx:start_idx+1, :] = V
+
+            K = k_cache[:, :, :, :start_idx+1, :]
+            V = v_cache[:, :, :, :start_idx+1, :]
+
         scores = matmul(Q, K.transpose(-1, -2)) / math.sqrt(self.d_head)
-        # scores.shape == (B,H,T,T)
+        # scores.shape == (B,H,T_q,T_k)
 
         scores = self._apply_mask(scores, T, device, mask=mask)
 
