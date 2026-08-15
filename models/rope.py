@@ -72,26 +72,43 @@ class RoPE(nn.Module):
         cached_cos: Tensor = None,
         start_idx: int = 0,
     ) -> tuple[Tensor, Tensor]:
-        cached_sin_cos_is_given = (cached_sin is not None) and (cached_cos is not None)
+        cache_sin_is_given = cached_sin is not None
+        cache_cos_is_given = cached_cos is not None
         if cached_sin is None and (hasattr(self, "cached_sin") and self.cached_sin is not None):
             cached_sin = self.cached_sin
         if cached_cos is None and (hasattr(self, "cached_cos") and self.cached_cos is not None):
             cached_cos = self.cached_cos
 
         need_new_cache = (
-            cached_sin.size(-1) != D // 2
-            or cached_sin.size(-2) < T
-            or cached_sin.device != device
-            or cached_sin.dtype != dtype
+            (
+                cached_sin is not None
+                and (
+                    cached_sin.size(-1) != D // 2
+                    or cached_sin.size(-2) < T
+                    or cached_sin.device != device
+                    or cached_sin.dtype != dtype
+                )
+            )
+            or (
+                cached_cos is not None
+                and (
+                    cached_cos.size(-1) != D // 2
+                    or cached_cos.size(-2) < T
+                    or cached_cos.device != device
+                    or cached_cos.dtype != dtype
+                )
+            )
+            or cached_sin is None
+            or cached_cos is None
         )
         if need_new_cache:
-            if cached_sin is not None:
+            if cache_sin_is_given:
                 raise ValueError(
                     "RoPE에 주어진 cached_sin의 shape, device, dtype이 입력 텐서와 맞지 않습니다."
                     f"\n예상 shape= (..., {cached_sin.size(0)}, {cached_sin.size(1)}), device= {cached_sin.device}, dtype= {cached_sin.dtype}"
                     f"\n현재 shape= (..., {T}, {D//2}), device= {device}, dtype= {dtype}"
                 )
-            if cached_cos is not None:
+            if cache_cos_is_given:
                 raise ValueError(
                     "RoPE에 주어진 cached_cos의 shape, device, dtype이 입력 텐서와 맞지 않습니다."
                     f"\n예상 shape= (..., {cached_cos.size(0)}, {cached_cos.size(1)}), device= {cached_cos.device}, dtype= {cached_cos.dtype}"
@@ -117,7 +134,7 @@ class RoPE(nn.Module):
         start_idx: int = 0,
     ) -> tuple[Tensor, Tensor]:
         if cached_sin is None:
-            if hasattr(self, "cached_sin"):
+            if hasattr(self, "cached_sin") and self.cached_sin.size(-2) >= T:
                 cached_sin = self.cached_sin
                 cached_cos = self.cached_cos
             else:
