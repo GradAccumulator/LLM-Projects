@@ -55,10 +55,7 @@ class RoPE(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         angles = (
             torch.arange(T, device=device, dtype=torch.float32)[:, None]
-            * base
-            ** (-2 * torch.arange(D // 2, device=device, dtype=torch.float32) / D)[
-                None, :
-            ]
+            * base ** (-2 * torch.arange(D // 2, device=device, dtype=torch.float32) / D)[None, :]
         )
 
         sin = angles.sin().to(dtype)
@@ -73,6 +70,7 @@ class RoPE(nn.Module):
         dtype: torch.dtype,
         cached_sin: Tensor = None,
         cached_cos: Tensor = None,
+        start_idx: int = 0,
     ) -> tuple[Tensor, Tensor]:
         cached_sin_cos_is_given = (cached_sin is not None) and (cached_cos is not None)
         if cached_sin is None and (hasattr(self, "cached_sin") and self.cached_sin is not None):
@@ -80,17 +78,23 @@ class RoPE(nn.Module):
         if cached_cos is None and (hasattr(self, "cached_cos") and self.cached_cos is not None):
             cached_cos = self.cached_cos
 
-        need_new_cache =  (
-            cached_sin.shape != (T, D // 2)
+        need_new_cache = (
+            cached_sin.size(-1) != D // 2
             or cached_sin.size(-2) < T
             or cached_sin.device != device
             or cached_sin.dtype != dtype
         )
         if need_new_cache:
-            if cached_sin_cos_is_given:
+            if cached_sin is not None:
                 raise ValueError(
-                    "RoPE에 주어진 cached_sin, cached_cos의 shape, device, dtype이 입력 텐서와 맞지 않습니다."
+                    "RoPE에 주어진 cached_sin의 shape, device, dtype이 입력 텐서와 맞지 않습니다."
                     f"\n예상 shape= (..., {cached_sin.size(0)}, {cached_sin.size(1)}), device= {cached_sin.device}, dtype= {cached_sin.dtype}"
+                    f"\n현재 shape= (..., {T}, {D//2}), device= {device}, dtype= {dtype}"
+                )
+            if cached_cos is not None:
+                raise ValueError(
+                    "RoPE에 주어진 cached_cos의 shape, device, dtype이 입력 텐서와 맞지 않습니다."
+                    f"\n예상 shape= (..., {cached_cos.size(0)}, {cached_cos.size(1)}), device= {cached_cos.device}, dtype= {cached_cos.dtype}"
                     f"\n현재 shape= (..., {T}, {D//2}), device= {device}, dtype= {dtype}"
                 )
 
@@ -100,7 +104,7 @@ class RoPE(nn.Module):
         else:
             sin, cos = cached_sin, cached_cos
 
-        return sin[:T], cos[:T]
+        return sin[start_idx:T], cos[start_idx:T]
 
     def _compute_sin_cos_fast(
         self,
@@ -110,43 +114,48 @@ class RoPE(nn.Module):
         dtype: torch.dtype,
         cached_sin: Tensor = None,
         cached_cos: Tensor = None,
+        start_idx: int = 0,
     ) -> tuple[Tensor, Tensor]:
         if cached_sin is None:
             if hasattr(self, "cached_sin"):
                 cached_sin = self.cached_sin
                 cached_cos = self.cached_cos
             else:
-                cached_sin, cached_cos = self.compute_sin_cos(
-                    T, D, device, dtype, self.base
-                )
+                cached_sin, cached_cos = self.compute_sin_cos(T, D, device, dtype, self.base)
                 self.register_buffer("cached_sin", cached_sin, persistent=False)
                 self.register_buffer("cached_cos", cached_cos, persistent=False)
-        return cached_sin[:T], cached_cos[:T]
+        return cached_sin[start_idx:T], cached_cos[start_idx:T]
 
     def _rotate(self, x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
-        #x.shape == (B,H,T,D)
-        #or x.shape == (B, H_q//H_kv, H_kv, T, D)
+        # x.shape == (B,H,T,D)
+        # or x.shape == (B, H_q//H_kv, H_kv, T, D)
         return _RotateFunction.apply(x, sin, cos)
 
     def forward(
-        self, Q: Tensor, K: Tensor, cached_sin: Tensor = None, cached_cos: Tensor = None
+        self,
+        Q: Tensor,
+        K: Tensor,
+        cached_sin: Tensor = None,
+        cached_cos: Tensor = None,
+        start_idx: int = 0,
     ) -> tuple[Tensor, Tensor]:
         # Q, K.shape == (B, H, T, D)
         T = Q.size(-2)
         D = Q.size(-1)
+        start_idx *= torch.is_inference_mode_enabled()
 
         if D % 2 != 0:
             raise ValueError(
-                f"RoPE의 입력으로 주어지는 Q 행렬의 마지막 차원의 크기는 짝수여야 합니다. 현재: {D}"
+                f"<RoPE.forward()> RoPE의 입력으로 주어지는 Q 행렬의 마지막 차원의 크기는 짝수여야 합니다. 현재: {D}"
             )
 
         if rt.DEBUG_CHECKS:
             sin, cos = self._compute_sin_cos_safe(
-                T, D, Q.device, Q.dtype, cached_sin, cached_cos
+                start_idx + T, D, Q.device, Q.dtype, cached_sin, cached_cos, start_idx
             )
         else:
             sin, cos = self._compute_sin_cos_fast(
-                T, D, Q.device, Q.dtype, cached_sin, cached_cos
+                start_idx + T, D, Q.device, Q.dtype, cached_sin, cached_cos, start_idx
             )
 
         Q_rot = self._rotate(Q, sin, cos)
