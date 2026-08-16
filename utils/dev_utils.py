@@ -35,7 +35,7 @@ def make_dictconfig(
 
 
 def check_dictconfig(cfg: DictConfig | dict, required_keys: list, func_name: str):
-    missing = [key for key in required_keys if OmegaConf.select(cfg, key) is None]
+    missing = [key for key in required_keys if OmegaConf.select(cfg, key, default=-392847521) == -392847521]
     if missing:
         raise ValueError(f"<{func_name}> cfg에서 누락된 key: {missing}")
 

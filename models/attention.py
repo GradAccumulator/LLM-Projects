@@ -9,6 +9,7 @@ from .softmax import Softmax
 from .dropout import Dropout
 from utils import dev_utils
 from configs import runtime as rt
+from .kv_cache import Cache
 
 
 class MultiHeadAttention(nn.Module):
@@ -163,9 +164,7 @@ class MultiHeadAttention(nn.Module):
         out = out.transpose(1, 2).reshape(B, T, self.embed_dim)
         return out
 
-    def forward_debug(
-        self, x: Tensor, mask: Tensor, T: int, k_cache: Tensor, v_cache: Tensor, start_idx: int
-    ) -> Tensor:
+    def forward_debug(self, x: Tensor, mask: Tensor, T: int, k_cache: Cache, v_cache: Cache, start_idx: int) -> Tensor:
         # x.shape == (B, T, D)
         # mask.shape == (T, T)
         func_name = "MultiHeadAttention.forward()"
@@ -223,8 +222,8 @@ class MultiHeadAttention(nn.Module):
         mask: Tensor = None,
         cached_sin: Tensor = None,
         cached_cos: Tensor = None,
-        k_cache: Tensor = None,
-        v_cache: Tensor = None,
+        k_cache: Cache = None,
+        v_cache: Cache = None,
         start_idx: int = 0,
     ) -> Tensor:
         # x.shape == (B, T, D)
@@ -249,23 +248,20 @@ class MultiHeadAttention(nn.Module):
         if torch.is_inference_mode_enabled():
             len_k = K.size(-2)
             len_v = V.size(-2)
+            k_cache[..., start_idx : start_idx + len_k] = K
+            v_cache[..., start_idx : start_idx + len_v] = V
+
             if self.use_gqa:
-                k_cache[:, :, :, start_idx : start_idx + len_k, :] = K
-                v_cache[:, :, :, start_idx : start_idx + len_v, :] = V
-
-                K = k_cache[:, :, :, : start_idx + len_k, :]
-                V = v_cache[:, :, :, : start_idx + len_v, :]
+                Q = Q[:,:,:,-1:,:]
             else:
-                k_cache[:, :, start_idx : start_idx + len_k, :] = K
-                v_cache[:, :, start_idx : start_idx + len_v, :] = V
-
-                K = k_cache[:, :, : start_idx + len_k, :]
-                V = v_cache[:, :, : start_idx + len_v, :]
+                Q = Q[:,:,-1:,:]
+            K = k_cache[..., : start_idx + len_k]
+            V = v_cache[..., : start_idx + len_v]
 
         scores = matmul(Q, K.transpose(-1, -2)) / math.sqrt(self.d_head)
         # scores.shape == (B,H,T_q,T_k)
 
-        scores = self._apply_mask(scores, T, device, mask=mask)
+        scores = self._apply_mask(scores, T, device, mask=mask[:T])
 
         out = self._attention(scores, V, B, T)
         # out.shape == (B, T, D)

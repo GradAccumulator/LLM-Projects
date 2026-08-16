@@ -147,10 +147,13 @@ class TransformerBlock(nn.Module):
         mask: Tensor = None,
         cached_sin: Tensor = None,
         cached_cos: Tensor = None,
+        k_cache: Tensor = None,
+        v_cache: Tensor = None,
+        start_idx: int = 0,
     ) -> Tensor:
         x = x + self.dropout(
             self.attention(
-                self.ln1(x), mask=mask, cached_sin=cached_sin, cached_cos=cached_cos
+                self.ln1(x), mask=mask, cached_sin=cached_sin, cached_cos=cached_cos, k_cache=k_cache, v_cache=v_cache, start_idx=start_idx,
             )
         )
         x = x + self.dropout(self.ffn(self.ln2(x)))
