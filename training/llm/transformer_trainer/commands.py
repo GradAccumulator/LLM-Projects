@@ -26,3 +26,7 @@ class ValidateCommand(TrainingCommand):
 class BreakpointCommand(TrainingCommand):
     def execute(self, trainer):
         return trainer.stop_train()
+
+class SaveModelCommand(TrainingCommand):
+    def execute(self, trainer):
+        return trainer.save_model()

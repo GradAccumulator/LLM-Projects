@@ -46,7 +46,9 @@ vocab_size = 32  # K
 seq_len = 1024
 model_num = 1
 
-model_name = f"model{model_params}_v{vocab_size}_s{seq_len}-{model_num}"
+model_name = nn_utils.make_model_name(
+    model_params=model_params, vocab_size=vocab_size, seq_len=seq_len, model_num=model_num
+)
 
 
 def load_loggers():
@@ -69,9 +71,7 @@ def main(cfg):
     )
     weight_decay = cfg.optimizer[cfg.optimizer.name].get("weight_decay", 0.0)
     param_groups = separate_decay_params(model.parameters(), weight_decay)
-    optimizer = nn_utils.build_optimizer(
-        param_groups, cfg.optimizer.name, cfg.optimizer
-    )
+    optimizer = nn_utils.build_optimizer(param_groups, cfg.optimizer.name, cfg.optimizer)
     scheduler = nn_utils.build_scheduler(optimizer, cfg)
     loss_fn = nn_utils.build_loss_fn(cfg.loss.name, cfg.loss)
     tokenizer = Tokenizer(f"{vocab_size}k_" + cfg.dataset.name)

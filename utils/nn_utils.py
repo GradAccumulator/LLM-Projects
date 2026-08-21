@@ -418,3 +418,6 @@ def build_dataloaders(cfg):
         pin_memory=True,
     )
     return train_loader, val_loader
+
+def make_model_name(model_params:int, vocab_size:int, seq_len:int, model_num:int):
+    return f"model{model_params}_v{vocab_size}_s{seq_len}-{model_num}"

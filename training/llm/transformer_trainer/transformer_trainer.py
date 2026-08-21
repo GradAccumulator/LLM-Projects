@@ -5,6 +5,8 @@ from omegaconf import DictConfig
 import math
 import torch, torch.nn as nn
 import torch.utils.data as data
+from datetime import datetime
+from pathlib import Path
 
 from . import commands
 from models import Transformer
@@ -20,10 +22,7 @@ class TransformerTrainer:
     def __init__(
         self,
         model: Transformer,
-        dataloaders: (
-            tuple[data.DataLoader, data.DataLoader]
-            | list[data.DataLoader, data.DataLoader]
-        ),
+        dataloaders: tuple[data.DataLoader, data.DataLoader] | list[data.DataLoader, data.DataLoader],
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
         loss_fn: nn.Module,
@@ -36,10 +35,7 @@ class TransformerTrainer:
     def __init__(
         self,
         model: Transformer,
-        dataloaders: (
-            tuple[data.DataLoader, data.DataLoader]
-            | list[data.DataLoader, data.DataLoader]
-        ),
+        dataloaders: tuple[data.DataLoader, data.DataLoader] | list[data.DataLoader, data.DataLoader],
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
         loss_fn: nn.Module,
@@ -56,10 +52,7 @@ class TransformerTrainer:
     def __init__(
         self,
         model: Transformer,
-        dataloaders: (
-            tuple[data.DataLoader, data.DataLoader]
-            | list[data.DataLoader, data.DataLoader]
-        ),
+        dataloaders: tuple[data.DataLoader, data.DataLoader] | list[data.DataLoader, data.DataLoader],
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
         loss_fn: nn.Module,
@@ -96,9 +89,7 @@ class TransformerTrainer:
         self.tokenizer = tokenizer
         self.loggers = loggers or LoggerList()
 
-        if isinstance(cfg, DictConfig | dict) or isinstance(
-            log_interval, DictConfig | dict
-        ):
+        if isinstance(cfg, DictConfig | dict) or isinstance(log_interval, DictConfig | dict):
             if isinstance(cfg, DictConfig | dict):
                 cfg = dev_utils.make_dictconfig(cfg)
             elif isinstance(log_interval, DictConfig | dict):
@@ -222,6 +213,19 @@ class TransformerTrainer:
             trainer=self,
         )
 
+    def save_model(self):
+        save_dir = Path(__file__).parent.parent.parent / "checkpoints"
+        if hasattr(self.train_loader.dataset, "name"):
+            model_name = int(input("모델 이름을 입력하세요: "))
+            torch.save(
+                self.model.state_dict(),
+                save_dir
+                / f"{model_name}_{self.train_loader.dataset.name}_step{self.current_step}_{datetime.now().strftime("%Y%m%d_%H%M%S")}",
+            )
+        else:
+            file_name = input("저장할 파일 이름을 입력하세요: ")
+            torch.save(self.model.state_dict(), file_name)
+
     def _handle_step_conditions(self) -> TrainLoopResult | None:
         if self.current_step % self.log_interval == 0:
             self._log(
@@ -267,9 +271,7 @@ class TransformerTrainer:
 
         with torch.autocast(device_type=str(self.device), dtype=self.precision):
             logits = self.model(x)
-            loss = self.loss_fn(
-                logits.reshape(-1, logits.size(-1)), target.reshape(-1).long()
-            )
+            loss = self.loss_fn(logits.reshape(-1, logits.size(-1)), target.reshape(-1).long())
         return loss
 
     def _backward(self, loss: Tensor, x_shape):
@@ -288,10 +290,7 @@ class TransformerTrainer:
             if (res := self._process_commands()) is not None:
                 return res
 
-            if (
-                self._accumulated_batches >= self.grad_accumulation
-                and (res := self.step()) is not None
-            ):
+            if self._accumulated_batches >= self.grad_accumulation and (res := self.step()) is not None:
                 return res
 
         return TrainLoopResult.EPOCH_COMPLETED
