@@ -37,7 +37,7 @@ class KVCache(nn.Module):
         self.empty_cache()
 
     def empty_cache(self):
-        self.cache = torch.empty(0, device="meta")
+        self.register_buffer("cache", None, persistent=False)
 
     def allocate(self, device, dtype):
         cache_size = (
@@ -45,18 +45,17 @@ class KVCache(nn.Module):
             if self.use_gqa
             else (self.num_layers, 1, self.num_kv_heads, self.max_seq_len, self.d_head)
         )
-        del self.cache
         self.register_buffer("cache", torch.empty(*cache_size, device=device, dtype=dtype), persistent=False)
 
     def expand(self, max_seq_len: int, start_idx: int):
         cache = self.cache
 
         self.max_seq_len = max_seq_len
-        self.allocate_kv_cache()
-        self[..., :start_idx] = cache
+        self.allocate(device=cache.device, dtype=cache.dtype)
+        self[..., :start_idx] = cache[..., :start_idx]
 
     def __getitem__(self, keys):
-        if  isinstance(keys, tuple):
+        if isinstance(keys, tuple):
             if len(keys) == 2 and keys[0] == Ellipsis:
                 if self.use_gqa:
                     return self.cache[:, :, :, :, keys[1], :]
@@ -80,4 +79,4 @@ class KVCache(nn.Module):
             self.cache[keys] = value
 
     def is_empty(self):
-        return self.cache.device.type == "meta"
+        return self.cache is None

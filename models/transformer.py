@@ -403,7 +403,7 @@ class Transformer(nn.Module):
                 self.k_cache.allocate(device=x.device, dtype=x.dtype)
             if self.v_cache.is_empty():
                 self.v_cache.allocate(device=x.device, dtype=x.dtype)
-        elif self.kv_cache_idx > 0:
+        elif not self.k_cache.is_empty() or not self.v_cache.is_empty():
             self.empty_kv_cache()
 
     def forward(self, x: Tensor) -> Tensor:

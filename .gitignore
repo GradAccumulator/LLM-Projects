@@ -5,4 +5,6 @@ outputs/
 *.txt
 *.bin
 *.jsonl
+*.png
 **/tb_logs/
+logs/debugging/main.py
