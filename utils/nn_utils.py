@@ -238,7 +238,9 @@ def _save_for_backward_debug(dtype, method, allowed_quantize_methods):
         )
 
 
-def save_for_backward(ctx, *args):
+def save_for_backward(needs_grad, ctx, *args):
+    if needs_grad:
+        return
     dtype = rt.ACTIVATION_SAVE_DTYPE
     method = rt.ACTIVATION_QUANTIZE_METHOD
     allowed_quantize_methods = [

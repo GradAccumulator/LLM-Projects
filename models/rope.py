@@ -7,8 +7,8 @@ from utils import dev_utils, nn_utils
 
 class _RotateFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
-        nn_utils.save_for_backward(ctx, sin, cos)
+    def forward(ctx, needs_grad:bool, x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
+        nn_utils.save_for_backward(needs_grad, ctx, sin, cos)
         x_even, x_odd = x[..., 0::2], x[..., 1::2]
 
         x_rot_even = x_even * cos - x_odd * sin
@@ -32,7 +32,7 @@ class _RotateFunction(torch.autograd.Function):
         grad_x[..., 0::2] = grad_x_even
         grad_x[..., 1::2] = grad_x_odd
 
-        return grad_x, None, None
+        return None, grad_x, None, None
 
 
 class RoPE(nn.Module):
@@ -146,7 +146,7 @@ class RoPE(nn.Module):
     def _rotate(self, x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
         # x.shape == (B,H,T,D)
         # or x.shape == (B, H_q//H_kv, H_kv, T, D)
-        return _RotateFunction.apply(x, sin, cos)
+        return _RotateFunction.apply(torch.is_grad_enabled(), x, sin, cos)
 
     def forward(
         self,

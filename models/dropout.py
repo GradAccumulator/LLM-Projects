@@ -5,14 +5,14 @@ from utils import nn_utils, dev_utils
 
 class _DropoutFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x: Tensor, p: int | float) -> Tensor:
+    def forward(ctx, needs_grad:bool, x: Tensor, p: int | float) -> Tensor:
         ctx.p = p
         if ctx.p == 0:
             return x
         mask = torch.rand_like(x, dtype=torch.bfloat16) > ctx.p
         mask /= 1 - ctx.p
         mask = mask.to(x.dtype)
-        nn_utils.save_for_backward(ctx, mask)
+        nn_utils.save_for_backward(needs_grad, ctx, mask)
         return x * mask
 
     @staticmethod
@@ -20,7 +20,7 @@ class _DropoutFunction(torch.autograd.Function):
         if ctx.p == 0:
             return grad_output, None
         (mask,) = nn_utils.saved_tensors(ctx, grad_output.dtype)
-        return grad_output * mask, None
+        return None, grad_output * mask, None
 
 
 class Dropout(nn.Module):
@@ -36,7 +36,7 @@ class Dropout(nn.Module):
         self._p = p
 
     def forward(self, x: Tensor) -> Tensor:
-        return _DropoutFunction.apply(x, self.p * self.training)
+        return _DropoutFunction.apply(torch.is_grad_enabled(), x, self.p * self.training)
 
     @property
     def p(self):

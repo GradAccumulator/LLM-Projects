@@ -10,6 +10,7 @@ class _LayerNormFunction(torch.autograd.Function):
     @staticmethod
     def forward(
         ctx,
+        needs_grad: bool,
         x: Tensor,
         gamma: Tensor,
         beta: Tensor,
@@ -27,7 +28,7 @@ class _LayerNormFunction(torch.autograd.Function):
         if beta is not None:
             out = out + beta
 
-        nn_utils.save_for_backward(ctx, v, inv_std, gamma, beta, x_hat)
+        nn_utils.save_for_backward(needs_grad, ctx, v, inv_std, gamma, beta, x_hat)
         ctx.normalized_dims = normalized_dims
         return out
 
@@ -45,10 +46,9 @@ class _LayerNormFunction(torch.autograd.Function):
         grad_x = inv_std * (
             grad_x_hat
             - grad_x_hat.mean(dim=ctx.normalized_dims, keepdim=True)
-            - (inv_std.square() * v)
-            * (v * grad_x_hat).mean(dim=ctx.normalized_dims, keepdim=True)
+            - (inv_std.square() * v) * (v * grad_x_hat).mean(dim=ctx.normalized_dims, keepdim=True)
         )
-        return grad_x, grad_gamma, grad_beta, None, None
+        return None, grad_x, grad_gamma, grad_beta, None, None
 
 
 class LayerNorm(nn.Module):
@@ -85,13 +85,10 @@ class LayerNorm(nn.Module):
                 )
             if value <= 0:
                 raise ValueError(
-                    f"<{func_name}> normalized_shape의 모든 값은 양의 정수여야 합니다. "
-                    f"{i}번째 값: {value}"
+                    f"<{func_name}> normalized_shape의 모든 값은 양의 정수여야 합니다. " f"{i}번째 값: {value}"
                 )
         if len(normalized_shape) == 0:
-            raise ValueError(
-                f"<{func_name}> normalized_shape는 최소 1개 이상이어야 합니다."
-            )
+            raise ValueError(f"<{func_name}> normalized_shape는 최소 1개 이상이어야 합니다.")
         if eps <= 0:
             raise ValueError(f"<{func_name}> eps는 반드시 양수여야 합니다.")
 
@@ -108,13 +105,9 @@ class LayerNorm(nn.Module):
             func_name=func_name,
         )
 
-        self._gamma = nn_utils.init_parameter(
-            *normalized_shape, init_cfg=init_cfg.gamma
-        )
+        self._gamma = nn_utils.init_parameter(*normalized_shape, init_cfg=init_cfg.gamma)
         if self.use_bias:
-            self._beta = nn_utils.init_parameter(
-                *normalized_shape, init_cfg=init_cfg.beta
-            )
+            self._beta = nn_utils.init_parameter(*normalized_shape, init_cfg=init_cfg.beta)
 
     def forward_debug(self, x: Tensor):
         # x.shape == (B, T, D), self.normalized_shape == (D,)
@@ -136,7 +129,7 @@ class LayerNorm(nn.Module):
             self.forward_debug(x)
 
         return _LayerNormFunction.apply(
-            x, self.gamma, self.beta, self.normalized_dims, self.eps
+            torch.is_grad_enabled(), x, self.gamma, self.beta, self.normalized_dims, self.eps
         )
 
     @property

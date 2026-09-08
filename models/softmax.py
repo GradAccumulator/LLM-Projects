@@ -6,7 +6,7 @@ from utils import dev_utils, nn_utils
 
 class _SoftmaxFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x: Tensor, temperature: float, dim: int):
+    def forward(ctx, needs_grad:bool, x: Tensor, temperature: float, dim: int):
         if temperature != 1:
             x = x / temperature
 
@@ -15,7 +15,7 @@ class _SoftmaxFunction(torch.autograd.Function):
         y = exp_x / exp_x.sum(dim=dim, keepdim=True)
         y = y.to(x.dtype)
 
-        nn_utils.save_for_backward(ctx, y)
+        nn_utils.save_for_backward(needs_grad, ctx, y)
         ctx.temperature = temperature
         ctx.dim = dim
         return y
@@ -26,7 +26,7 @@ class _SoftmaxFunction(torch.autograd.Function):
         out = y * (grad_output - (grad_output * y).sum(dim=ctx.dim, keepdim=True))
         if ctx.temperature != 1:
             return out / ctx.temperature
-        return out, None, None
+        return None, out, None, None
 
 
 class Softmax(nn.Module):
@@ -46,7 +46,7 @@ class Softmax(nn.Module):
         self._temperature = temperature
 
     def forward(self, x: Tensor) -> Tensor:
-        return _SoftmaxFunction.apply(x, self.temperature, self.dim)
+        return _SoftmaxFunction.apply(torch.is_grad_enabled(), x, self.temperature, self.dim)
 
     @property
     def dim(self):

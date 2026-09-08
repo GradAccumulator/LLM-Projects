@@ -6,9 +6,9 @@ from utils import nn_utils, dev_utils
 
 class _SiLUFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x: Tensor):
+    def forward(ctx, needs_grad:bool, x: Tensor):
         sig = torch.sigmoid(x)
-        nn_utils.save_for_backward(ctx, x, sig)
+        nn_utils.save_for_backward(needs_grad, ctx, x, sig)
         return x * sig
         #    x
         # ---------
@@ -18,7 +18,7 @@ class _SiLUFunction(torch.autograd.Function):
     def backward(ctx, grad_output: Tensor):
         x, sig = nn_utils.saved_tensors(ctx, grad_output.dtype)
 
-        return grad_output * ((x + 1) * sig - x * (sig**2))
+        return None, grad_output * ((x + 1) * sig - x * (sig**2))
 
 
 class SiLU(nn.Module):
@@ -26,4 +26,4 @@ class SiLU(nn.Module):
         super().__init__()
 
     def forward(self, x: Tensor) -> Tensor:
-        return _SiLUFunction.apply(x)
+        return _SiLUFunction.apply(torch.is_grad_enabled(), x)

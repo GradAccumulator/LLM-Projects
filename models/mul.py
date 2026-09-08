@@ -6,8 +6,8 @@ from utils import nn_utils
 
 class _MulFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, a: Tensor, b: Tensor):
-        nn_utils.save_for_backward(ctx, a, b)
+    def forward(ctx, needs_grad:bool, a: Tensor, b: Tensor):
+        nn_utils.save_for_backward(needs_grad, ctx, a, b)
         return a * b
 
     @staticmethod
@@ -20,8 +20,8 @@ class _MulFunction(torch.autograd.Function):
         if ctx.needs_input_grad[1]:
             grad_b = grad_output * a
 
-        return grad_a, grad_b
+        return None, grad_a, grad_b
 
 
 def mul(a: Tensor, b: Tensor) -> Tensor:
-    return _MulFunction.apply(a, b)
+    return _MulFunction.apply(torch.is_grad_enabled(), a, b)

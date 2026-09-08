@@ -8,8 +8,8 @@ from utils import nn_utils, dev_utils
 
 class _LinearFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x: Tensor, weight: Tensor, bias: Tensor | None) -> Tensor:
-        nn_utils.save_for_backward(ctx, x, weight)
+    def forward(ctx, needs_grad: bool, x: Tensor, weight: Tensor, bias: Tensor | None) -> Tensor:
+        nn_utils.save_for_backward(needs_grad, ctx, x, weight)
         ctx.use_bias = bias is not None
 
         out = x @ weight.T
@@ -25,15 +25,11 @@ class _LinearFunction(torch.autograd.Function):
 
         grad_x = grad_output @ weight
 
-        grad_weight = grad_output.view(-1, weight.size(0)).T @ x.view(
-            -1, weight.size(1)
-        )
+        grad_weight = grad_output.view(-1, weight.size(0)).T @ x.view(-1, weight.size(1))
 
-        grad_bias = (
-            grad_output.view(-1, weight.size(0)).sum(dim=0) if ctx.use_bias else None
-        )
+        grad_bias = grad_output.view(-1, weight.size(0)).sum(dim=0) if ctx.use_bias else None
 
-        return grad_x, grad_weight, grad_bias
+        return None, grad_x, grad_weight, grad_bias
 
 
 class Linear(nn.Module):
@@ -85,9 +81,7 @@ class Linear(nn.Module):
             func_name=func_name,
         )
 
-        self._weight = nn_utils.init_parameter(
-            out_features, in_features, init_cfg=init_cfg.weight
-        )
+        self._weight = nn_utils.init_parameter(out_features, in_features, init_cfg=init_cfg.weight)
         if self.use_bias:
             self._bias = nn_utils.init_parameter(out_features, init_cfg=init_cfg.bias)
 
@@ -103,7 +97,7 @@ class Linear(nn.Module):
         if rt.DEBUG_CHECKS:
             self.forward_debug(x)
 
-        return _LinearFunction.apply(x, self.weight, self.bias)
+        return _LinearFunction.apply(torch.is_grad_enabled(), x, self.weight, self.bias)
 
     @property
     def bias(self):

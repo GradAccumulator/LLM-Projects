@@ -15,11 +15,11 @@ class _MatmulFunction(torch.autograd.Function):
             )
 
     @staticmethod
-    def forward(ctx, a: Tensor, b: Tensor):
+    def forward(ctx, needs_grad:bool, a: Tensor, b: Tensor):
         # a.shape = (..., a, c), b.shape = (..., c, b), out.shape = (..., a,b)
         if rt.DEBUG_CHECKS:
             _MatmulFunction._forward_debug(a, b)
-        nn_utils.save_for_backward(ctx, a, b)
+        nn_utils.save_for_backward(needs_grad, ctx, a, b)
 
         return a @ b
 
@@ -51,8 +51,8 @@ class _MatmulFunction(torch.autograd.Function):
         if ctx.needs_input_grad[1]:
             grad_b = a.transpose(-1, -2) @ grad_output
         
-        return grad_a, grad_b
+        return None, grad_a, grad_b
 
 
 def matmul(a: Tensor, b: Tensor) -> Tensor:
-    return _MatmulFunction.apply(a, b)
+    return _MatmulFunction.apply(torch.is_grad_enabled(), a, b)
