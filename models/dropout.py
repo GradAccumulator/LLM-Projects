@@ -18,7 +18,7 @@ class _DropoutFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output: Tensor) -> tuple[Tensor, None]:
         if ctx.p == 0:
-            return grad_output, None
+            return None, grad_output, None
         (mask,) = nn_utils.saved_tensors(ctx, grad_output.dtype)
         return None, grad_output * mask, None
 
