@@ -19,7 +19,8 @@ class HWLogger(Logger):
         file_name: str,
         interval: float = 5.0,
         append_timestamp_to_filename: bool = True,
-        cuda_idx=0,
+        cuda_idx: int = 0,
+        cuda_debug: bool = False,
     ):
         dev_utils.type_check(
             ("log_dir", log_dir, str | Path),
@@ -27,6 +28,7 @@ class HWLogger(Logger):
             ("append_timestamp_to_filename", append_timestamp_to_filename, bool),
             ("interval", interval, int | float),
             ("cuda_idx", cuda_idx, int),
+            ("cuda_debug", cuda_debug, bool),
             func_name="JsonlLogger.__init__()",
         )
         if isinstance(log_dir, str):
@@ -41,6 +43,7 @@ class HWLogger(Logger):
         self._file_name = file_name
         self._interval = interval
         self._cuda_idx = cuda_idx
+        self._cuda_debug = cuda_debug
 
         self._path = log_dir / f"{file_name}.jsonl"
         self._gpu_handle = nvml.nvmlDeviceGetHandleByIndex(self.cuda_idx)
@@ -53,52 +56,61 @@ class HWLogger(Logger):
         self._stop_event.set()
         psutil.cpu_percent(interval=None)
 
+
     def _get_state(self):
         vram = nvml.nvmlDeviceGetMemoryInfo(self._gpu_handle)
         reason_mask = nvml.nvmlDeviceGetCurrentClocksEventReasons(self._gpu_handle)
         memory = psutil.virtual_memory()
         cuda_stats = torch.cuda.memory_stats(self._device)
-        return {
+
+        cuda_reserved_mib = cuda_stats["reserved_bytes.all.current"] / MIB
+        cuda_allocated_mib = cuda_stats["allocated_bytes.all.current"] / MIB
+        cuda_active_mib = cuda_stats["active_bytes.all.current"] / MIB
+        cuda_driver_free, cuda_driver_total = torch.cuda.mem_get_info(self._device)
+
+        state = {
             # nvml
             "vram_used_mib": vram.used / MIB,
             "vram_used_percent": vram.used / vram.total * 100,
-            "gpu_temperature_c": nvml.nvmlDeviceGetTemperature(
-                self._gpu_handle, nvml.NVML_TEMPERATURE_GPU
-            ),
+            "gpu_temperature_c": nvml.nvmlDeviceGetTemperature(self._gpu_handle, nvml.NVML_TEMPERATURE_GPU),
             "gpu_power_w": nvml.nvmlDeviceGetPowerUsage(self._gpu_handle) / 1000,
-            "power_limit_w": nvml.nvmlDeviceGetPowerManagementLimit(self._gpu_handle)
-            / 1000,
-            "gpu_sm_clock_mhz": nvml.nvmlDeviceGetClockInfo(
-                self._gpu_handle, nvml.NVML_CLOCK_SM
-            ),
+            "power_limit_w": nvml.nvmlDeviceGetPowerManagementLimit(self._gpu_handle) / 1000,
+            "gpu_sm_clock_mhz": nvml.nvmlDeviceGetClockInfo(self._gpu_handle, nvml.NVML_CLOCK_SM),
             "gpu_utilization": nvml.nvmlDeviceGetUtilizationRates(self._gpu_handle).gpu,
-            "gpu_memory_clock_mhz": nvml.nvmlDeviceGetClockInfo(
-                self._gpu_handle, nvml.NVML_CLOCK_MEM
-            ),
-            "limit_idle": bool(reason_mask & nvml.nvmlClocksEventReasonGpuIdle),
+            "gpu_memory_clock_mhz": nvml.nvmlDeviceGetClockInfo(self._gpu_handle, nvml.NVML_CLOCK_MEM),
             "limit_power": bool(reason_mask & nvml.nvmlClocksEventReasonSwPowerCap),
-            "limit_sw_thermal": bool(
-                reason_mask & nvml.nvmlClocksEventReasonSwThermalSlowdown
-            ),
-            "limit_hw_thermal": bool(
-                reason_mask & nvml.nvmlClocksEventReasonHwThermalSlowdown
-            ),
-            "limit_power_brake": bool(
-                reason_mask & nvml.nvmlClocksEventReasonHwPowerBrakeSlowdown
-            ),
+            "limit_sw_thermal": bool(reason_mask & nvml.nvmlClocksEventReasonSwThermalSlowdown),
+            "limit_hw_thermal": bool(reason_mask & nvml.nvmlClocksEventReasonHwThermalSlowdown),
+            "limit_power_brake": bool(reason_mask & nvml.nvmlClocksEventReasonHwPowerBrakeSlowdown),
             # psutil
             "cpu_utilization": psutil.cpu_percent(),
             "ram_available_mib": memory.available / MIB,
             "ram_used_mib": (memory.total - memory.available) / MIB,
-            "ram_utilization_percent": memory.percent,
             # cuda
-            "cuda_allocated_mib": cuda_stats["allocated_bytes.all.current"] / MIB,
-            "cuda_reserved_mib": cuda_stats["reserved_bytes.all.current"] / MIB,
+            "cuda_allocated_mib": cuda_allocated_mib,
+            "cuda_reserved_mib": cuda_reserved_mib,
             "cuda_peak_allocated_mib": cuda_stats["allocated_bytes.all.peak"] / MIB,
             "cuda_peak_reserved_mib": cuda_stats["reserved_bytes.all.peak"] / MIB,
             "cuda_allocation_retries": cuda_stats["num_alloc_retries"],
             "cuda_oom_count": cuda_stats["num_ooms"],
+            "cuda_driver_free_mib": cuda_driver_free / MIB,
         }
+
+        if self.cuda_debug:
+            state.update(
+                {
+                    "cuda_inactive_split_mib": (cuda_stats["inactive_split_bytes.all.current"] / MIB),
+                    "cuda_inactive_split_count": cuda_stats["inactive_split.all.current"],
+                    "cuda_active_mib": cuda_active_mib,
+                    "cuda_segment_count": cuda_stats["segment.all.current"],
+                    "cuda_device_alloc_count": cuda_stats["num_device_alloc"],
+                    "cuda_device_free_count": cuda_stats["num_device_free"],
+                    "cuda_sync_all_streams": cuda_stats["num_sync_all_streams"],
+                    "cuda_driver_total_mib": cuda_driver_total / MIB,
+                }
+            )
+
+        return state
 
     def _run(self):
         with self.path.open(mode="a", encoding="utf-8") as f:
@@ -180,3 +192,7 @@ class HWLogger(Logger):
     @property
     def file_name(self):
         return self._file_name
+
+    @property
+    def cuda_debug(self):
+        return self._cuda_debug
