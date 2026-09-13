@@ -43,14 +43,21 @@ class TensorboardLogger(Logger):
                     trainer.current_step,
                 )
             case TrainingEvent.VALIDATION_ENDED:
-                self.writer.add_scalars(
-                    "val", {"loss": loss, "ppl": ppl}, trainer.current_step
+                self.writer.add_scalar(
+                    "eval/loss",
+                    loss,
+                    trainer.current_step
+                )
+                self.writer.add_scalar(
+                    "eval/ppl",
+                    loss,
+                    trainer.current_step,
                 )
             case TrainingEvent.LOG_INTERVAL_REACHED:
                 self.writer.add_scalar(
                     "train/loss",
                     loss,
-                    trainer.current_step
+                    trainer.current_step,
                 )
             case _:
                 return
