@@ -15,9 +15,9 @@ class _MulFunction(torch.autograd.Function):
         a, b = nn_utils.saved_tensors(ctx, grad_output.dtype)
         grad_a = grad_b = None
 
-        if ctx.needs_input_grad[0]:
-            grad_a = grad_output * b
         if ctx.needs_input_grad[1]:
+            grad_a = grad_output * b
+        if ctx.needs_input_grad[2]:
             grad_b = grad_output * a
 
         return None, grad_a, grad_b

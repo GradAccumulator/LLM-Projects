@@ -25,7 +25,7 @@ class _SoftmaxFunction(torch.autograd.Function):
         (y,) = nn_utils.saved_tensors(ctx, grad_output.dtype)
         out = y * (grad_output - (grad_output * y).sum(dim=ctx.dim, keepdim=True))
         if ctx.temperature != 1:
-            return out / ctx.temperature
+            return None, out / ctx.temperature, None, None
         return None, out, None, None
 
 

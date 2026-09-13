@@ -45,10 +45,10 @@ class _MatmulFunction(torch.autograd.Function):
         if rt.DEBUG_CHECKS:
             _MatmulFunction.backward_debug(a, b, grad_output)
 
-        if ctx.needs_input_grad[0]:
+        if ctx.needs_input_grad[1]:
             grad_a = grad_output @ b.transpose(-1, -2)
 
-        if ctx.needs_input_grad[1]:
+        if ctx.needs_input_grad[2]:
             grad_b = a.transpose(-1, -2) @ grad_output
         
         return None, grad_a, grad_b
