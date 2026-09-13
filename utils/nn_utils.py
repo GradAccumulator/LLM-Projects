@@ -269,7 +269,7 @@ def saved_tensors(ctx, dtype: torch.dtype) -> list[Tensor]:
     if scales:
         dequantized_tensors = []
         for tensor, scale in zip(quantized_tensors, scales):
-            dequantized_tensors.append(tensor.to(dtype=dtype) * scale)
+            dequantized_tensors.append(tensor.to(dtype=dtype).mul_(scale))
     else:
         dequantized_tensors = [tensor.to(dtype=dtype) for tensor in quantized_tensors]
 
