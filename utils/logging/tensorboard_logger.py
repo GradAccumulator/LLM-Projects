@@ -50,7 +50,7 @@ class TensorboardLogger(Logger):
                 )
                 self.writer.add_scalar(
                     "eval/ppl",
-                    loss,
+                    ppl,
                     trainer.current_step,
                 )
             case TrainingEvent.LOG_INTERVAL_REACHED:
