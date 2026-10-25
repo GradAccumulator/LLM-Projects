@@ -106,6 +106,7 @@ class MultiHeadAttention(nn.Module):
             self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.out_linear, use_bias=bias)
             self.softmax = Softmax(dim=-1)
             self.dropout = Dropout(dropout)
+            self._matmul = matmul
         else:
             if not self.use_gqa:
                 self.qkv_linear = nn.Linear(embed_dim, embed_dim * 3, bias=bias)
@@ -120,9 +121,10 @@ class MultiHeadAttention(nn.Module):
                     embed_dim,
                     bias=bias,
                 )
-                self.out_linear = nn.Linear(embed_dim, embed_dim, bias=bias)
-                self.softmax = nn.Softmax(dim=-1)
-                self.dropout = nn.Dropout(dropout)
+            self.out_linear = nn.Linear(embed_dim, embed_dim, bias=bias)
+            self.softmax = nn.Softmax(dim=-1)
+            self.dropout = nn.Dropout(dropout)
+            self._matmul = lambda x,y:x@y
         self._dropout_p = dropout
         self._use_bias = bias
         self.cached_mask: Tensor
@@ -180,7 +182,7 @@ class MultiHeadAttention(nn.Module):
         # scores.shape == (B,H,T,T), V.shape == (B,H,T,D)
         weights = self.softmax(scores)
         drop = self.dropout(weights)
-        out = matmul(drop, V)
+        out = self._matmul(drop, V)
         if self.use_gqa:
             # out.shape == (B,H_kv,H_q//H_kv,T, D)
             out = out.reshape(B, self.num_q_heads, T, self.d_head)
@@ -282,7 +284,7 @@ class MultiHeadAttention(nn.Module):
             V = v_cache[..., : start_idx + len_v]
 
         if self.custom:
-            scores = matmul(Q, K.transpose(-1, -2)) / math.sqrt(self.d_head)
+            scores = self._matmul(Q, K.transpose(-1, -2)) / math.sqrt(self.d_head)
             # scores.shape == (B,H,T_q,T_k)
 
             scores = self._apply_mask(scores, T, device, mask=mask[:T])

@@ -5,6 +5,8 @@ from omegaconf import DictConfig
 import math
 import torch, torch.nn as nn
 import torch.utils.data as data
+from contextlib import nullcontext
+from torch.autograd.graph import saved_tensors_hooks
 
 from . import commands
 from models import Transformer
@@ -13,7 +15,6 @@ from utils import dev_utils, nn_utils
 from .commands import TrainLoopResult, TrainingCommand
 from tokenizer import Tokenizer
 from utils.logging import LoggerList, TrainingEvent
-
 
 class TransformerTrainer:
     @overload
@@ -31,6 +32,7 @@ class TransformerTrainer:
         *,
         tokenizer: Tokenizer = None,
         loggers: LoggerList = None,
+        custom:bool = True,
     ): ...
     @overload
     def __init__(
@@ -52,6 +54,7 @@ class TransformerTrainer:
         grad_accumulation: int = 1,
         validation_interval: int | None = None,
         validation: bool = True,
+        custom:bool = True,
     ): ...
     def __init__(
         self,
@@ -72,6 +75,7 @@ class TransformerTrainer:
         grad_accumulation: int = 1,
         validation_interval: int | None = None,
         validation: bool = True,
+        custom:bool = True,
         cfg: DictConfig | dict = None,
     ):
         func_name = "TransformerTrainer.__init__()"
@@ -85,6 +89,7 @@ class TransformerTrainer:
             ("dataloaders[1]", dataloaders[1], data.DataLoader),
             ("optim", optimizer, torch.optim.Optimizer),
             ("scheduler", scheduler, torch.optim.lr_scheduler.LRScheduler),
+            ("custom", custom, bool),
             func_name=func_name,
         )
         self.model = model
@@ -123,6 +128,7 @@ class TransformerTrainer:
             validation_interval = cfg.train.validation_interval
             grad_clip_norm = cfg.optimizer.grad_clip_norm
             grad_accumulation = cfg.optimizer.grad_accumulation
+            custom = cfg.model.custom
 
         dev_utils.type_check(
             ("max_steps", max_steps, int),
@@ -142,6 +148,7 @@ class TransformerTrainer:
         self._precision = nn_utils.load_dtype(precision)
         self._grad_accumulation = grad_accumulation
         self.validation_interval = validation_interval
+        self._custom = custom
 
         self._tot_loss = 0.0
         self._tokens_seen = 0
@@ -281,18 +288,24 @@ class TransformerTrainer:
         self._tot_loss += loss.item() * dataset_length
 
     def _train_one_epoch(self) -> TrainLoopResult:
-        for x, target in self.train_loader:
-            loss = self._forward(x, target)
-            self._backward(loss, x.shape)
+        ctx = (
+            saved_tensors_hooks(nn_utils.pack_hook, nn_utils.unpack_hook)
+            if not self.custom else nullcontext()
+        )
+        
+        with ctx:
+            for x, target in self.train_loader:
+                loss = self._forward(x, target)
+                self._backward(loss, x.shape)
 
-            if (res := self._process_commands()) is not None:
-                return res
+                if (res := self._process_commands()) is not None:
+                    return res
 
-            if (
-                self._accumulated_batches >= self.grad_accumulation
-                and (res := self.step()) is not None
-            ):
-                return res
+                if (
+                    self._accumulated_batches >= self.grad_accumulation
+                    and (res := self.step()) is not None
+                ):
+                    return res
 
         return TrainLoopResult.EPOCH_COMPLETED
 
@@ -388,3 +401,7 @@ class TransformerTrainer:
         )
         value = value if isinstance(value, torch.dtype) else nn_utils.load_dtype(value)
         self.model.to(dtype=value)
+
+    @property
+    def custom(self):
+        return self._custom

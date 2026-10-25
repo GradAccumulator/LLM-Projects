@@ -414,3 +414,29 @@ def build_dataloaders(cfg):
         pin_memory=True,
     )
     return train_loader, val_loader
+
+@torch.no_grad()
+def pack_hook(x: Tensor):
+    dtype = rt.ACTIVATION_SAVE_DTYPE
+    method = rt.ACTIVATION_QUANTIZE_METHOD
+    allowed_quantize_methods = [
+        "per-tensor",
+    ]
+    if rt.DEBUG_CHECKS == True:
+        _save_for_backward_debug(dtype, method, allowed_quantize_methods)
+
+    if x.dtype not in (torch.float16, torch.bfloat16, torch.float32):
+        return x.detach()
+
+    match method:
+        case 'per-tensor'|_:
+            scale = (x.abs().amax()/448.0).clamp_min(1e-12)
+            packed = (x/scale).to(dtype)
+    return packed, scale, x.dtype
+
+@torch.no_grad()
+def unpack_hook(x: Tensor|tuple):
+    if isinstance(x, Tensor):
+        return x
+    packed,scale,dtype = x
+    return packed.to(dtype)*scale

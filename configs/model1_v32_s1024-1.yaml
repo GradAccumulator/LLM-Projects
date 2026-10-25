@@ -1,5 +1,5 @@
 model:
-  custom: false
+  custom: true
   vocab_size : 32000
   num_layers : 24
   embed_dim  : null
