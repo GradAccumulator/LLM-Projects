@@ -1,26 +1,8 @@
 import torch, torch.nn as nn
 from torch import Tensor
-from utils import nn_utils, dev_utils
+from utils import dev_utils
 
-
-class _DropoutFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, needs_grad:bool, x: Tensor, p: int | float) -> Tensor:
-        ctx.p = p
-        if ctx.p == 0:
-            return x
-        mask = torch.rand_like(x, dtype=torch.bfloat16) > ctx.p
-        mask /= 1 - ctx.p
-        mask = mask.to(x.dtype)
-        nn_utils.save_for_backward(needs_grad, ctx, mask)
-        return x * mask
-
-    @staticmethod
-    def backward(ctx, grad_output: Tensor) -> tuple[Tensor, None]:
-        if ctx.p == 0:
-            return None, grad_output, None
-        (mask,) = nn_utils.saved_tensors(ctx, grad_output.dtype)
-        return None, grad_output * mask, None
+from custom_functions import DropoutFunction
 
 
 class Dropout(nn.Module):
@@ -29,14 +11,12 @@ class Dropout(nn.Module):
         func_name = "Dropout.__init__()"
         dev_utils.type_check(("p", p, int | float), func_name=func_name)
         if not 0 <= p < 1:
-            raise ValueError(
-                f"<{func_name}> dropout p는 반드시 [0, 1) 범위의 실수여야 합니다."
-            )
+            raise ValueError(f"<{func_name}> dropout p는 반드시 [0, 1) 범위의 실수여야 합니다.")
 
         self._p = p
 
     def forward(self, x: Tensor) -> Tensor:
-        return _DropoutFunction.apply(torch.is_grad_enabled(), x, self.p * self.training)
+        return DropoutFunction.apply(torch.is_grad_enabled(), x, self.p * self.training)
 
     @property
     def p(self):

@@ -18,6 +18,7 @@ class FFN(nn.Module):
         activation: str = None,
         init_cfg: DictConfig | dict = None,
         use_bias: bool = False,
+        custom:bool = False,
     ):
         """```
         init_cfg = {
@@ -46,6 +47,7 @@ class FFN(nn.Module):
             ("ffn_dim", ffn_dim, int),
             ("use_bias", use_bias, bool),
             ("activation", activation, str | None),
+            ("custom", custom, bool),
             ("init_cfg", init_cfg, DictConfig | dict | None),
             func_name=func_name,
         )
@@ -77,17 +79,34 @@ class FFN(nn.Module):
 
         self._ffn_type = ffn_type
         self._use_swiglu = ffn_type == "swiglu"
-        if self.use_swiglu:
-            self.linear1 = Linear(
-                in_features, ffn_dim * 2, init_cfg=init_cfg.linear1, use_bias=use_bias
+        self._custom = custom
+        
+        if custom:
+            if self.use_swiglu:
+                self.linear1 = Linear(
+                    in_features, ffn_dim * 2, init_cfg=init_cfg.linear1, use_bias=use_bias
+                )
+            else:
+                self.linear1 = Linear(
+                    in_features, ffn_dim, init_cfg=init_cfg.linear1, use_bias=use_bias
+                )
+            self.linear2 = Linear(
+                ffn_dim, in_features, init_cfg=init_cfg.linear2, use_bias=use_bias
             )
+            self._mul = mul
         else:
-            self.linear1 = Linear(
-                in_features, ffn_dim, init_cfg=init_cfg.linear1, use_bias=use_bias
+            if self.use_swiglu:
+                self.linear1 = nn.Linear(
+                    in_features, ffn_dim*2, bias=use_bias
+                )
+            else:
+                self.linear1 = nn.Linear(
+                    in_features, ffn_dim, bias=use_bias
+                )
+            self.linear2 = nn.Linear(
+                ffn_dim, in_features, bias=use_bias
             )
-        self.linear2 = Linear(
-            ffn_dim, in_features, init_cfg=init_cfg.linear2, use_bias=use_bias
-        )
+            self._mul = lambda x,y: x*y
 
     def forward(self, x: Tensor) -> Tensor:
         # x.shape == (B, T, D)
@@ -95,7 +114,7 @@ class FFN(nn.Module):
             l1, l2 = self.linear1(x).chunk(2, dim=-1)
             l1 = self.act_fn(l1)
 
-            x = self.linear2(mul(l1, l2))
+            x = self.linear2(self._mul(l1, l2))
 
         else:
             x = self.linear1(x)
@@ -129,3 +148,7 @@ class FFN(nn.Module):
     @property
     def out_features(self):
         return self.linear2.out_features
+    
+    @property
+    def custom(self):
+        return self._custom

@@ -27,6 +27,7 @@ class TransformerBlock(nn.Module):
         ffn: Literal["swiglu", "mlp"] = "swiglu",
         activation: str = "silu",
         num_q_heads:int|None = None,
+        custom:bool = True,
         init_cfg: DictConfig | dict|None = None,
     ):
         """```
@@ -93,6 +94,7 @@ class TransformerBlock(nn.Module):
             ("dropout", dropout, float | int),
             ("RoPE_base", RoPE_base, float | int | None),
             ("attn_dropout", attn_dropout, float | int | None),
+            ("custom", custom, bool),
             ("init_cfg", init_cfg, DictConfig | dict | None),
             func_name=func_name,
         )
@@ -107,12 +109,30 @@ class TransformerBlock(nn.Module):
         if attn_dropout is None:
             attn_dropout = dropout
 
-        self.ln1 = LayerNorm(
-            embed_dim,
-            eps=norm_eps,
-            bias=norm_bias,
-            init_cfg=init_cfg.layer_norm,
-        )
+        if custom:
+            self.ln1 = LayerNorm(
+                embed_dim,
+                eps=norm_eps,
+                bias=norm_bias,
+                init_cfg=init_cfg.layer_norm,
+            )
+            self.ln2 = LayerNorm(
+                embed_dim,
+                bias=norm_bias,
+                eps=norm_eps,
+                init_cfg=init_cfg.layer_norm,
+            )
+            self._dropout = Dropout(dropout)
+        else:
+            self.ln1 = nn.LayerNorm(
+                embed_dim, eps=norm_eps, bias=norm_bias,
+            )
+            self.ln2 = nn.LayerNorm(
+                embed_dim,
+                eps=norm_eps,
+                bias=norm_bias,
+            )
+            self._dropout = nn.Dropout(dropout)
         self.attention = MultiHeadAttention(
             embed_dim,
             num_kv_heads,
@@ -121,15 +141,8 @@ class TransformerBlock(nn.Module):
             use_RoPE=use_RoPE,
             RoPE_base=RoPE_base,
             num_q_heads=num_q_heads,
+            custom=custom,
             init_cfg=init_cfg.attention,
-        )
-        self._dropout = Dropout(dropout)
-
-        self.ln2 = LayerNorm(
-            embed_dim,
-            bias=norm_bias,
-            eps=norm_eps,
-            init_cfg=init_cfg.layer_norm,
         )
 
         self.ffn = FFN(
@@ -139,6 +152,7 @@ class TransformerBlock(nn.Module):
             activation,
             init_cfg=init_cfg.ffn,
             use_bias=ffn_bias,
+            custom=custom,
         )
 
     def forward(

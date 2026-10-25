@@ -63,13 +63,13 @@ def num_to_str(num):
     return f"{num}"
 
 
-def str_to_num(num_str: str):
+def str_to_num(num_str: str, return_type:type = float):
     match num_str[-1]:
         case "B":
-            return float(num_str[:-1]) * B
+            return return_type(float(num_str[:-1]) * B)
         case "M":
-            return float(num_str[:-1]) * M
+            return return_type(float(num_str[:-1]) * M)
         case "K":
-            return float(num_str[:-1]) * K
+            return return_type(float(num_str[:-1]) * K)
         case _:
-            return float(num_str)
+            return return_type(float(num_str))

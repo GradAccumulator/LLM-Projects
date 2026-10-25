@@ -21,6 +21,7 @@ class Transformer(nn.Module):
         """```
         cfg = {
             "model": {
+                "custom": bool,
                 "vocab_size": int,
                 "max_seq_len": int,
                 "num_layers": int,
@@ -118,6 +119,7 @@ class Transformer(nn.Module):
         RoPE_base: int | float = None,
         ffn: str = "swiglu",
         activation: str = "silu",
+        custom:bool = True,
         init_cfg: DictConfig | dict = None,
     ):
         """```
@@ -197,6 +199,7 @@ class Transformer(nn.Module):
         RoPE_base: int | float = None,
         ffn: str = "swiglu",
         activation: str = "silu",
+        custom:bool = True,
         init_cfg: DictConfig | dict = None,
     ):
         """```
@@ -285,6 +288,8 @@ class Transformer(nn.Module):
 
             norm_eps = model_cfg.layernorm.eps
             norm_bias = model_cfg.layernorm.bias
+            
+            custom = model_cfg.custom
 
         func_name = "Transformer.__init__()"
         dev_utils.type_check(
@@ -305,9 +310,11 @@ class Transformer(nn.Module):
             ("dropout", dropout, float | int),
             ("RoPE_base", RoPE_base, float | int | None),
             ("attn_dropout", attn_dropout, float | int | None),
+            ("custom", custom, bool),
             ("init_cfg", init_cfg, DictConfig | dict | None),
             func_name=func_name,
         )
+        self._custom = custom
         init_cfg = dev_utils.make_dictconfig(
             init_cfg,
             default={
@@ -332,7 +339,22 @@ class Transformer(nn.Module):
             else:
                 ffn_dim = embed_dim * 4
 
-        self.embedding = Embedding(vocab_size, embed_dim, init_cfg=init_cfg.embedding)
+        if custom:
+            self.embedding = Embedding(vocab_size, embed_dim, init_cfg=init_cfg.embedding)
+            self.final_layer_norm = LayerNorm(
+                embed_dim,
+                eps=norm_eps,
+                bias=norm_bias,
+                init_cfg=init_cfg.final_layer_norm,
+            )
+        else:
+            self.embedding = nn.Embedding(vocab_size, embed_dim)
+            self.final_layer_norm = nn.LayerNorm(
+                embed_dim,
+                eps=norm_eps,
+                bias=norm_bias,
+            )
+        
         self.transformer_blocks = nn.ModuleList(
             [
                 TransformerBlock(
@@ -350,16 +372,11 @@ class Transformer(nn.Module):
                     RoPE_base=RoPE_base,
                     ffn=ffn,
                     activation=activation,
+                    custom=custom,
                     init_cfg=init_cfg.transformer_block,
                 )
                 for _ in range(num_layers)
             ]
-        )
-        self.final_layer_norm = LayerNorm(
-            self.embed_dim,
-            eps=self.norm_eps,
-            bias=norm_bias,
-            init_cfg=init_cfg.final_layer_norm,
         )
 
         if not use_RoPE:
@@ -408,7 +425,8 @@ class Transformer(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         # x.shape == (B, T)
-        x = self.embedding(x)
+        T_in = x.size(1)
+        x = self.embedding(x if self.custom else x.int())
         if not self.use_RoPE:
             pos_ids = torch.arange(x.size(1), device=x.device)
             x = x + self._pos_embedding(pos_ids)[None, :, :]
@@ -426,7 +444,7 @@ class Transformer(nn.Module):
         x = self.final_layer_norm(x)
 
         if torch.is_inference_mode_enabled():
-            self.kv_cache_idx += x.size(1)
+            self.kv_cache_idx += T_in
 
         return matmul(x, self.embedding.weight.T)
 
@@ -529,3 +547,7 @@ class Transformer(nn.Module):
     @property
     def max_seq_len(self):
         return self._max_seq_len
+
+    @property
+    def custom(self):
+        return self._custom

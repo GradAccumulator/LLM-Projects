@@ -1,0 +1,52 @@
+import torch
+from torch import Tensor
+from configs import runtime as rt
+
+from utils import nn_utils
+
+
+class MatmulFunction(torch.autograd.Function):
+    @staticmethod
+    def _forward_debug(a, b):
+        func_name = "_MatmulFunction._forward_debug()"
+        if a.dtype != b.dtype:
+            raise ValueError(f"<{func_name}> 입력의 a.dtype, b.dtype이 다릅니다. a: {a.dtype}, b: {b.dtype}")
+
+    @staticmethod
+    def forward(ctx, needs_grad: bool, a: Tensor, b: Tensor):
+        # a.shape = (..., a, c), b.shape = (..., c, b), out.shape = (..., a,b)
+        if rt.DEBUG_CHECKS:
+            MatmulFunction._forward_debug(a, b)
+        nn_utils.save_for_backward(needs_grad, ctx, a, b)
+
+        return a @ b
+
+    @staticmethod
+    def backward_debug(a, b, grad_output):
+        func_name = "_MatmulFunction.backward_debug()"
+        if grad_output.dtype != a.dtype:
+            raise ValueError(
+                f"<{func_name}> grad_output의 dtype과 a의 dtype이 다릅니다."
+                f"grad_output: {grad_output.dtype}, a: {a.dtype}"
+            )
+        if grad_output.dtype != b.dtype:
+            raise ValueError(
+                f"<{func_name}> grad_output의 dtype과 b의 dtype이 다릅니다. "
+                f"grad_output: {grad_output.dtype}, b: {b.dtype}"
+            )
+
+    @staticmethod
+    def backward(ctx, grad_output: Tensor):
+        a, b = nn_utils.saved_tensors(ctx, grad_output.dtype)
+        grad_a = grad_b = None
+
+        if rt.DEBUG_CHECKS:
+            MatmulFunction.backward_debug(a, b, grad_output)
+
+        if ctx.needs_input_grad[1]:
+            grad_a = grad_output @ b.transpose(-1, -2)
+
+        if ctx.needs_input_grad[2]:
+            grad_b = a.transpose(-1, -2) @ grad_output
+
+        return None, grad_a, grad_b

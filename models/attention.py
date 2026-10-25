@@ -1,6 +1,7 @@
 import torch, torch.nn as nn, math
 from torch import Tensor
 from omegaconf import DictConfig
+import torch.nn.functional as F
 
 from .rope import RoPE
 from .matmul import matmul
@@ -23,6 +24,7 @@ class MultiHeadAttention(nn.Module):
         use_RoPE: bool = True,
         RoPE_base: int | float | None = None,
         num_q_heads: int | None = None,
+        custom:bool = True,
     ):
         """```
         init_cfg = {
@@ -54,6 +56,7 @@ class MultiHeadAttention(nn.Module):
             ("use_RoPE", use_RoPE, bool),
             ("dropout", dropout, float | int),
             ("RoPE_base", RoPE_base, float | int | None),
+            ("custom", custom, bool),
             ("init_cfg", init_cfg, DictConfig | dict | None),
             func_name=func_name,
         )
@@ -83,24 +86,44 @@ class MultiHeadAttention(nn.Module):
             ("qkv_linear", "out_linear"),
             func_name=func_name,
         )
-        if not self.use_gqa:
-            self.qkv_linear = Linear(embed_dim, embed_dim * 3, init_cfg=init_cfg.qkv_linear, use_bias=bias)
+        self._custom = custom
+        if custom:
+            if not self.use_gqa:
+                self.qkv_linear = Linear(embed_dim, embed_dim * 3, init_cfg=init_cfg.qkv_linear, use_bias=bias)
+            else:
+                self.kv_linear = Linear(
+                    embed_dim,
+                    self.d_head * self.num_kv_heads * 2,
+                    init_cfg=init_cfg.qkv_linear,
+                    use_bias=bias,
+                )
+                self.q_linear = Linear(
+                    embed_dim,
+                    embed_dim,
+                    init_cfg=init_cfg.qkv_linear,
+                    use_bias=bias,
+                )                
+            self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.out_linear, use_bias=bias)
+            self.softmax = Softmax(dim=-1)
+            self.dropout = Dropout(dropout)
         else:
-            self.kv_linear = Linear(
-                embed_dim,
-                self.d_head * self.num_kv_heads * 2,
-                init_cfg=init_cfg.qkv_linear,
-                use_bias=bias,
-            )
-            self.q_linear = Linear(
-                embed_dim,
-                embed_dim,
-                init_cfg=init_cfg.qkv_linear,
-                use_bias=bias,
-            )
-        self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.out_linear, use_bias=bias)
-        self.softmax = Softmax(dim=-1)
-        self.dropout = Dropout(dropout)
+            if not self.use_gqa:
+                self.qkv_linear = nn.Linear(embed_dim, embed_dim * 3, bias=bias)
+            else:
+                self.kv_linear = nn.Linear(
+                    embed_dim,
+                    self.d_head * self.num_kv_heads * 2,
+                    bias=bias,
+                )
+                self.q_linear = nn.Linear(
+                    embed_dim,
+                    embed_dim,
+                    bias=bias,
+                )
+                self.out_linear = nn.Linear(embed_dim, embed_dim, bias=bias)
+                self.softmax = nn.Softmax(dim=-1)
+                self.dropout = nn.Dropout(dropout)
+        self._dropout_p = dropout
         self._use_bias = bias
         self.cached_mask: Tensor
 
@@ -159,7 +182,7 @@ class MultiHeadAttention(nn.Module):
         drop = self.dropout(weights)
         out = matmul(drop, V)
         if self.use_gqa:
-            # out.shape == (B,H_q//H_kv,H_kv, T, D)
+            # out.shape == (B,H_kv,H_q//H_kv,T, D)
             out = out.reshape(B, self.num_q_heads, T, self.d_head)
         out = out.transpose(1, 2).reshape(B, T, self.embed_dim)
         return out
@@ -258,12 +281,22 @@ class MultiHeadAttention(nn.Module):
             K = k_cache[..., : start_idx + len_k]
             V = v_cache[..., : start_idx + len_v]
 
-        scores = matmul(Q, K.transpose(-1, -2)) / math.sqrt(self.d_head)
-        # scores.shape == (B,H,T_q,T_k)
+        if self.custom:
+            scores = matmul(Q, K.transpose(-1, -2)) / math.sqrt(self.d_head)
+            # scores.shape == (B,H,T_q,T_k)
 
-        scores = self._apply_mask(scores, T, device, mask=mask[:T])
+            scores = self._apply_mask(scores, T, device, mask=mask[:T])
 
-        out = self._attention(scores, V, B, T)
+            out = self._attention(scores, V, B, T)
+        else:
+            out = F.scaled_dot_product_attention(
+                query=Q,
+                key=K,
+                value=V,
+                attn_mask=mask[:T],
+                dropout_p=self.dropout_p,
+                enable_gqa=self.use_gqa,
+            ).reshape(B, self.num_q_heads, T, self.d_head).transpose(1,2).reshape(B, T, self.embed_dim)
         # out.shape == (B, T, D)
         out = self.out_linear(out)
         # out.shape == (B, T, D)
@@ -288,7 +321,7 @@ class MultiHeadAttention(nn.Module):
 
     @property
     def dropout_p(self):
-        return self.dropout.p
+        return self.dropout.p if self.custom else self._dropout_p
 
     @property
     def embed_dim(self):
@@ -310,3 +343,7 @@ class MultiHeadAttention(nn.Module):
     @property
     def use_gqa(self):
         return self._use_gqa
+
+    @property
+    def custom(self):
+        return self._custom
