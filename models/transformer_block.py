@@ -154,10 +154,12 @@ class TransformerBlock(nn.Module):
         k_cache: Tensor = None,
         v_cache: Tensor = None,
         start_idx: int = 0,
+        is_inference_mode:bool = False,
     ) -> Tensor:
         x = x + self.dropout(
             self.attention(
                 self.ln1(x), mask=mask, cached_sin=cached_sin, cached_cos=cached_cos, k_cache=k_cache, v_cache=v_cache, start_idx=start_idx,
+                is_inference_mode=is_inference_mode,
             )
         )
         x = x + self.dropout(self.ffn(self.ln2(x)))

@@ -92,7 +92,11 @@ class TransformerTrainer:
             ("custom", custom, bool),
             func_name=func_name,
         )
-        self.model = model
+        self.model = torch.compile(
+            model,
+            fullgraph=False,
+            mode='default',
+        )
         self.loss_fn = loss_fn
         self.optim = optimizer
         self.scheduler = scheduler
@@ -273,7 +277,7 @@ class TransformerTrainer:
         target = target.to(self.device, non_blocking=True)
 
         with torch.autocast(device_type=str(self.device), dtype=self.precision):
-            self.logits = self.model(x)
+            self.logits = self.model(x, is_inference_mode=torch.is_inference_mode_enabled())
             loss = self.loss_fn(
                 self.logits.reshape(-1, self.logits.size(-1)), target.reshape(-1).long()
             )

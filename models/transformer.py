@@ -379,9 +379,9 @@ class Transformer(nn.Module):
         self.v_cache = KVCache(self.num_layers, self.max_seq_len, self.d_head, self.transformer_blocks[0].attention.use_gqa, self.num_kv_heads)
         self.kv_cache_idx = 0
 
-    def make_cached_tensors(self, x: Tensor):
+    def make_cached_tensors(self, x: Tensor,is_inference_mode:bool):
         """x.shape == (B, T, D)"""
-        T = x.size(1) + self.kv_cache_idx*torch.is_inference_mode_enabled()
+        T = x.size(1) + self.kv_cache_idx*is_inference_mode
         device = x.device
         dtype = torch.get_autocast_dtype(device.type)
 
@@ -402,7 +402,7 @@ class Transformer(nn.Module):
                 self.register_buffer("cached_sin", sin, persistent=False)
                 self.register_buffer("cached_cos", cos, persistent=False)
 
-        if torch.is_inference_mode_enabled():
+        if is_inference_mode:
             if self.k_cache.is_empty():
                 self.k_cache.allocate(device=x.device, dtype=x.dtype)
             if self.v_cache.is_empty():
@@ -410,14 +410,14 @@ class Transformer(nn.Module):
         elif not self.k_cache.is_empty() or not self.v_cache.is_empty():
             self.empty_kv_cache()
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, is_inference_mode:bool=False) -> Tensor:
         # x.shape == (B, T)
         T_in = x.size(1)
         x = self.embedding(x if self.custom else x.int())
         if not self.use_RoPE:
             pos_ids = torch.arange(x.size(1), device=x.device)
             x = x + self._pos_embedding(pos_ids)[None, :, :]
-        self.make_cached_tensors(x)
+        self.make_cached_tensors(x,is_inference_mode=is_inference_mode,)
         for i, block in enumerate(self.transformer_blocks):
             x = block(
                 x,
@@ -427,10 +427,11 @@ class Transformer(nn.Module):
                 k_cache=self.k_cache[i],
                 v_cache=self.v_cache[i],
                 start_idx=self.kv_cache_idx,
+                is_inference_mode=is_inference_mode,
             )
         x = self.final_layer_norm(x)
 
-        if torch.is_inference_mode_enabled():
+        if is_inference_mode:
             self.kv_cache_idx += T_in
 
         return self._matmul(x, self.embedding.weight.T)

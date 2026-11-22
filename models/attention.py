@@ -178,7 +178,7 @@ class MultiHeadAttention(nn.Module):
         out = out.transpose(1, 2).reshape(B, T, self.embed_dim)
         return out
 
-    def forward_debug(self, x: Tensor, mask: Tensor, T: int, k_cache: Cache, v_cache: Cache, start_idx: int) -> Tensor:
+    def forward_debug(self, x: Tensor, mask: Tensor, T: int, k_cache: Cache, v_cache: Cache, start_idx: int,is_inference_mode:bool) -> Tensor:
         # x.shape == (B, T, D)
         # mask.shape == (T, T)
         func_name = "MultiHeadAttention.forward()"
@@ -196,7 +196,7 @@ class MultiHeadAttention(nn.Module):
                 f"<{func_name}> 입력 x의 마지막 차원은 embed_dim={self.embed_dim}이어야 합니다. "
                 f"현재 x.shape={tuple(x.shape)}"
             )
-        if torch.is_inference_mode_enabled():
+        if is_inference_mode:
             if k_cache is None:
                 raise ValueError(f"<{func_name}> inference mode가 활성화 돼있을 때는 k_cache가 필요합니다.")
             if v_cache is None:
@@ -239,6 +239,7 @@ class MultiHeadAttention(nn.Module):
         k_cache: Cache = None,
         v_cache: Cache = None,
         start_idx: int = 0,
+        is_inference_mode:bool = False,
     ) -> Tensor:
         # x.shape == (B, T, D)
         # k_cache,v_cache.shape == (1, H_kv, 1, T_max, D) or (1, H_qkv, T_max, D)
@@ -257,9 +258,10 @@ class MultiHeadAttention(nn.Module):
                 cached_sin=cached_sin,
                 cached_cos=cached_cos,
                 start_idx=start_idx,
+                is_inference_mode=is_inference_mode,
             )
 
-        if torch.is_inference_mode_enabled():
+        if is_inference_mode:
             len_k = K.size(-2)
             len_v = V.size(-2)
             k_cache[..., start_idx : start_idx + len_k] = K

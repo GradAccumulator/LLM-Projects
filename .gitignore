@@ -9,3 +9,4 @@ outputs/
 **/tb_logs/
 logs/debugging/main.py
 .vscode/
+run_train.cmd

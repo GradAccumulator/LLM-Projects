@@ -125,11 +125,12 @@ class RoPE(nn.Module):
         cached_sin: Tensor = None,
         cached_cos: Tensor = None,
         start_idx: int = 0,
+        is_inference_mode:bool=False,
     ) -> tuple[Tensor, Tensor]:
         # Q, K.shape == (B, H, T, D) or (B, H_kv, H_q//H_kv, T , D)
         T = Q.size(-2)
         D = Q.size(-1)
-        start_idx *= torch.is_inference_mode_enabled()
+        start_idx *= is_inference_mode
 
         if D % 2 != 0:
             raise ValueError(
