@@ -65,6 +65,7 @@ class LayerNorm(nn.Module):
         self._gamma = nn_utils.init_parameter(*normalized_shape, init_cfg=init_cfg.gamma)
         if self.use_bias:
             self._beta = nn_utils.init_parameter(*normalized_shape, init_cfg=init_cfg.beta)
+        self._custom = custom
         if not custom:
             self._ln = nn.LayerNorm(normalized_shape, eps, bias=bias)
             with torch.no_grad():
@@ -122,3 +123,7 @@ class LayerNorm(nn.Module):
     @property
     def normalized_shape(self):
         return self.gamma.shape
+
+    @property
+    def custom(self):
+        return self._custom

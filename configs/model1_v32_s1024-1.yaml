@@ -1,5 +1,5 @@
 model:
-  custom: true
+  custom: false
   vocab_size : 32000
   num_layers : 24
   embed_dim  : null
@@ -30,7 +30,7 @@ train:
   log_interval: 10
   max_steps   : null
   validation_interval: 1000
-  validation: true
+  validation: null
 
 validation:
   batch_size: 26

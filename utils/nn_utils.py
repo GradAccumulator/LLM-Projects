@@ -381,14 +381,14 @@ def resolve_llm_cfg(cfg: DictConfig):
         if cfg.model.attention.num_q_heads is not None:
             cfg.model.embed_dim = cfg.model.attention.num_q_heads * 64
         else:
-            cfg.model.embed_dim = cfg.model.num_kv_heads * 64
+            cfg.model.embed_dim = cfg.model.attention.num_kv_heads * 64
         print(f"embed_dim={cfg.model.embed_dim}으로 설정합니다.")
-    if cfg.ffn.dim is None:
-        if cfg.ffn.type.lower() == "swiglu":
-            cfg.ffn.dim = int(cfg.model.embed_dim * 8/3)
+    if cfg.model.ffn.dim is None:
+        if cfg.model.ffn.type.lower() == "swiglu":
+            cfg.model.ffn.dim = int(cfg.model.embed_dim * 8/3)
         else:
-            cfg.ffn.dim = cfg.model.embed_dim * 4
-        print(f"ffn_dim={cfg.model.ffn.dim}으로 설정합니다.")
+            cfg.model.ffn.dim = cfg.model.embed_dim * 4
+        print(f"model.ffn_dim={cfg.model.ffn.dim}으로 설정합니다.")
 
     
     _resolve_llm_init_cfg(cfg, cfg.init)

@@ -284,7 +284,7 @@ class MultiHeadAttention(nn.Module):
                 query=Q,
                 key=K,
                 value=V,
-                attn_mask=mask[:T],
+                attn_mask=~mask[:T],
                 dropout_p=self.dropout_p,
                 enable_gqa=self.use_gqa,
             ).transpose(1,2).reshape(B, T, self.embed_dim)

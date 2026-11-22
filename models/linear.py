@@ -43,7 +43,8 @@ class Linear(nn.Module):
             raise ValueError(f"<{func_name}> out_features는 양의 정수여야 합니다.")
 
         self._use_bias = use_bias
-
+        self._custom = custom
+        
         init_cfg = dev_utils.make_dictconfig(
             init_cfg,
             default={
@@ -104,3 +105,7 @@ class Linear(nn.Module):
     @property
     def out_features(self):
         return self.weight.size(0)
+
+    @property
+    def custom(self):
+        return self._custom
