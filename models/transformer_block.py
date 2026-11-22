@@ -109,30 +109,21 @@ class TransformerBlock(nn.Module):
         if attn_dropout is None:
             attn_dropout = dropout
 
-        if custom:
-            self.ln1 = LayerNorm(
-                embed_dim,
-                eps=norm_eps,
-                bias=norm_bias,
-                init_cfg=init_cfg.layer_norm,
-            )
-            self.ln2 = LayerNorm(
-                embed_dim,
-                bias=norm_bias,
-                eps=norm_eps,
-                init_cfg=init_cfg.layer_norm,
-            )
-            self._dropout = Dropout(dropout)
-        else:
-            self.ln1 = nn.LayerNorm(
-                embed_dim, eps=norm_eps, bias=norm_bias,
-            )
-            self.ln2 = nn.LayerNorm(
-                embed_dim,
-                eps=norm_eps,
-                bias=norm_bias,
-            )
-            self._dropout = nn.Dropout(dropout)
+        self.ln1 = LayerNorm(
+            embed_dim,
+            eps=norm_eps,
+            bias=norm_bias,
+            init_cfg=init_cfg.layer_norm,
+            custom=custom,
+        )
+        self.ln2 = LayerNorm(
+            embed_dim,
+            bias=norm_bias,
+            eps=norm_eps,
+            init_cfg=init_cfg.layer_norm,
+            custom=custom,
+        )
+        self._dropout = Dropout(dropout, custom=custom,)
         self.attention = MultiHeadAttention(
             embed_dim,
             num_kv_heads,
@@ -141,10 +132,9 @@ class TransformerBlock(nn.Module):
             use_RoPE=use_RoPE,
             RoPE_base=RoPE_base,
             num_q_heads=num_q_heads,
-            custom=custom,
             init_cfg=init_cfg.attention,
+            custom=custom,
         )
-
         self.ffn = FFN(
             embed_dim,
             ffn_dim,

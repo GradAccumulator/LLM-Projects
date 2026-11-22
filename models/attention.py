@@ -87,44 +87,39 @@ class MultiHeadAttention(nn.Module):
             func_name=func_name,
         )
         self._custom = custom
-        if custom:
-            if not self.use_gqa:
-                self.qkv_linear = Linear(embed_dim, embed_dim * 3, init_cfg=init_cfg.qkv_linear, use_bias=bias)
-            else:
-                self.kv_linear = Linear(
-                    embed_dim,
-                    self.d_head * self.num_kv_heads * 2,
-                    init_cfg=init_cfg.qkv_linear,
-                    use_bias=bias,
-                )
-                self.q_linear = Linear(
-                    embed_dim,
-                    embed_dim,
-                    init_cfg=init_cfg.qkv_linear,
-                    use_bias=bias,
-                )                
-            self.out_linear = Linear(embed_dim, embed_dim, init_cfg=init_cfg.out_linear, use_bias=bias)
-            self.softmax = Softmax(dim=-1)
-            self.dropout = Dropout(dropout)
-            self._matmul = matmul
+        if not self.use_gqa:
+            self.qkv_linear = Linear(
+                embed_dim, 
+                embed_dim * 3, 
+                use_bias=bias,
+                init_cfg=init_cfg.qkv_linear, 
+                custom = custom,
+            )
         else:
-            if not self.use_gqa:
-                self.qkv_linear = nn.Linear(embed_dim, embed_dim * 3, bias=bias)
-            else:
-                self.kv_linear = nn.Linear(
-                    embed_dim,
-                    self.d_head * self.num_kv_heads * 2,
-                    bias=bias,
-                )
-                self.q_linear = nn.Linear(
-                    embed_dim,
-                    embed_dim,
-                    bias=bias,
-                )
-            self.out_linear = nn.Linear(embed_dim, embed_dim, bias=bias)
-            self.softmax = nn.Softmax(dim=-1)
-            self.dropout = nn.Dropout(dropout)
-            self._matmul = lambda x,y:x@y
+            self.kv_linear = Linear(
+                embed_dim,
+                self.d_head * self.num_kv_heads * 2,
+                init_cfg=init_cfg.qkv_linear,
+                use_bias=bias,
+                custom = custom,
+            )
+            self.q_linear = Linear(
+                embed_dim,
+                embed_dim,
+                init_cfg=init_cfg.qkv_linear,
+                use_bias=bias,
+                custom = custom,
+            )                
+        self.out_linear = Linear(
+            embed_dim, 
+            embed_dim, 
+            use_bias=bias,
+            init_cfg=init_cfg.out_linear, 
+            custom = custom,
+        )
+        self.softmax = Softmax(dim=-1, custom = custom,)
+        self.dropout = Dropout(dropout, custom = custom,)
+        
         self._dropout_p = dropout
         self._use_bias = bias
         self.cached_mask: Tensor
@@ -148,20 +143,14 @@ class MultiHeadAttention(nn.Module):
         else:
             K, V = self.kv_linear(x).chunk(2, dim=-1)
             Q: Tensor = self.q_linear(x)
-            Q = (
-                Q.reshape(B, T, self.num_q_heads, self.d_head)
-                .transpose(1, 2)
-                .reshape(
-                    B,
-                    self.num_kv_heads,
-                    self.num_q_heads // self.num_kv_heads,
-                    T,
-                    self.d_head,
-                )
-            )
+            Q = Q.reshape(B, T, self.num_q_heads, self.d_head).transpose(1,2)
 
-            K = K.reshape(B, T, self.num_kv_heads, self.d_head).transpose(1, 2).unsqueeze(2)
-            V = V.reshape(B, T, self.num_kv_heads, self.d_head).transpose(1, 2).unsqueeze(2)
+            K = K.reshape(B, T, self.num_kv_heads, self.d_head).transpose(1, 2)
+            V = V.reshape(B, T, self.num_kv_heads, self.d_head).transpose(1, 2)
+            if self.custom:
+                Q = Q.reshape(B,self.num_kv_heads,self.num_q_heads // self.num_kv_heads,T,self.d_head)
+                K = K.unsqueeze(2)
+                V = V.unsqueeze(2)
 
         return B, Q, K, V
 
@@ -182,7 +171,7 @@ class MultiHeadAttention(nn.Module):
         # scores.shape == (B,H,T,T), V.shape == (B,H,T,D)
         weights = self.softmax(scores)
         drop = self.dropout(weights)
-        out = self._matmul(drop, V)
+        out = matmul(drop, V)
         if self.use_gqa:
             # out.shape == (B,H_kv,H_q//H_kv,T, D)
             out = out.reshape(B, self.num_q_heads, T, self.d_head)
@@ -284,7 +273,7 @@ class MultiHeadAttention(nn.Module):
             V = v_cache[..., : start_idx + len_v]
 
         if self.custom:
-            scores = self._matmul(Q, K.transpose(-1, -2)) / math.sqrt(self.d_head)
+            scores = matmul(Q, K.transpose(-1, -2)) / math.sqrt(self.d_head)
             # scores.shape == (B,H,T_q,T_k)
 
             scores = self._apply_mask(scores, T, device, mask=mask[:T])
@@ -298,7 +287,7 @@ class MultiHeadAttention(nn.Module):
                 attn_mask=mask[:T],
                 dropout_p=self.dropout_p,
                 enable_gqa=self.use_gqa,
-            ).reshape(B, self.num_q_heads, T, self.d_head).transpose(1,2).reshape(B, T, self.embed_dim)
+            ).transpose(1,2).reshape(B, T, self.embed_dim)
         # out.shape == (B, T, D)
         out = self.out_linear(out)
         # out.shape == (B, T, D)

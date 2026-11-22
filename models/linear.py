@@ -15,6 +15,7 @@ class Linear(nn.Module):
         *,
         use_bias: bool = True,
         init_cfg: DictConfig | dict = None,
+        custom : bool = True,
     ):
         """```
         init_cfg = {
@@ -59,6 +60,15 @@ class Linear(nn.Module):
         self._weight = nn_utils.init_parameter(out_features, in_features, init_cfg=init_cfg.weight)
         if self.use_bias:
             self._bias = nn_utils.init_parameter(out_features, init_cfg=init_cfg.bias)
+        
+        if not custom:
+            self._linear = nn.Linear(in_features, out_features, use_bias)
+            with torch.no_grad():
+                self._linear.weight.data = self._weight
+                self._weight = self._linear.weight
+                if use_bias:
+                    self._linear.bias.data = self._bias
+                    self._bias = self._linear.bias
 
     def forward_debug(self, x: Tensor):
         func_name = "Linear.forward()"
@@ -71,8 +81,9 @@ class Linear(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         if rt.DEBUG_CHECKS:
             self.forward_debug(x)
-
-        return LinearFunction.apply(torch.is_grad_enabled(), x, self.weight, self.bias)
+        if self.custom:
+            return LinearFunction.apply(torch.is_grad_enabled(), x, self.weight, self.bias)
+        return self._linear(x)
 
     @property
     def bias(self):

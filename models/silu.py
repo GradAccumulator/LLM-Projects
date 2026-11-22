@@ -5,8 +5,11 @@ from custom_functions import SiLUFunction
 
 
 class SiLU(nn.Module):
-    def __init__(self):
+    def __init__(self, custom:bool = True):
         super().__init__()
+        self.custom = custom
 
     def forward(self, x: Tensor) -> Tensor:
-        return SiLUFunction.apply(torch.is_grad_enabled(), x)
+        if self.custom:
+            return SiLUFunction.apply(torch.is_grad_enabled(), x)
+        return nn.functional.silu(x)

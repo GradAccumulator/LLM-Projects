@@ -69,9 +69,9 @@ class FFN(nn.Module):
             init_cfg, ("linear1", "linear2"), func_name=func_name
         )
 
-        match activation:
+        match activation.lower():
             case "silu" | None:
-                self.act_fn = SiLU()
+                self.act_fn = SiLU(custom=custom,)
             case _:
                 raise ValueError(
                     f"<{func_name}> activation 인자가 지원되지 않는 유형입니다 : {activation}"
@@ -81,32 +81,18 @@ class FFN(nn.Module):
         self._use_swiglu = ffn_type == "swiglu"
         self._custom = custom
         
-        if custom:
-            if self.use_swiglu:
-                self.linear1 = Linear(
-                    in_features, ffn_dim * 2, init_cfg=init_cfg.linear1, use_bias=use_bias
-                )
-            else:
-                self.linear1 = Linear(
-                    in_features, ffn_dim, init_cfg=init_cfg.linear1, use_bias=use_bias
-                )
-            self.linear2 = Linear(
-                ffn_dim, in_features, init_cfg=init_cfg.linear2, use_bias=use_bias
+        if self.use_swiglu:
+            self.linear1 = Linear(
+                in_features, ffn_dim * 2, init_cfg=init_cfg.linear1, use_bias=use_bias, custom=custom,
             )
-            self._mul = mul
         else:
-            if self.use_swiglu:
-                self.linear1 = nn.Linear(
-                    in_features, ffn_dim*2, bias=use_bias
-                )
-            else:
-                self.linear1 = nn.Linear(
-                    in_features, ffn_dim, bias=use_bias
-                )
-            self.linear2 = nn.Linear(
-                ffn_dim, in_features, bias=use_bias
+            self.linear1 = Linear(
+                in_features, ffn_dim, init_cfg=init_cfg.linear1, use_bias=use_bias, custom=custom,
             )
-            self._mul = lambda x,y: x*y
+        self.linear2 = Linear(
+            ffn_dim, in_features, init_cfg=init_cfg.linear2, use_bias=use_bias, custom=custom,
+        )
+        self._mul = mul if custom else torch.mul
 
     def forward(self, x: Tensor) -> Tensor:
         # x.shape == (B, T, D)

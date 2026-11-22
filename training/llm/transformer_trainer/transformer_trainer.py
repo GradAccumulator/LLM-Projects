@@ -273,9 +273,9 @@ class TransformerTrainer:
         target = target.to(self.device, non_blocking=True)
 
         with torch.autocast(device_type=str(self.device), dtype=self.precision):
-            logits = self.model(x)
+            self.logits = self.model(x)
             loss = self.loss_fn(
-                logits.reshape(-1, logits.size(-1)), target.reshape(-1).long()
+                self.logits.reshape(-1, self.logits.size(-1)), target.reshape(-1).long()
             )
         return loss
 

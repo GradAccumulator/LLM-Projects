@@ -7,7 +7,7 @@ from utils import nn_utils, dev_utils
 
 class Embedding(nn.Module):
     def __init__(
-        self, num_embeddings: int, embed_dim: int, init_cfg: DictConfig | dict = None
+        self, num_embeddings: int, embed_dim: int, init_cfg: DictConfig | dict = None, custom:bool = True
     ):
         """```
         init_cfg = {
@@ -41,14 +41,23 @@ class Embedding(nn.Module):
             ("method",),
             func_name=func_name,
         )
+        
+        self._custom = custom
 
         self._weight = nn_utils.init_parameter(
             num_embeddings, embed_dim, init_cfg=init_cfg
         )
+        if not custom:
+            self._embedding = nn.Embedding(num_embeddings, embed_dim)
+            with torch.no_grad():
+                self._embedding.weight.data = self._weight
+                self._weight = self._embedding.weight
 
     def forward(self, x: Tensor) -> Tensor:
         # x.shape == (B, T)
-        return self.weight[x.long()]
+        if self.custom:
+            return self.weight[x.long()]
+        return self._embedding(x.long())
 
     @property
     def weight(self):
@@ -61,3 +70,7 @@ class Embedding(nn.Module):
     @property
     def num_embeddings(self):
         return self.weight.size(0)
+    
+    @property
+    def custom(self) -> bool:
+        return self._custom

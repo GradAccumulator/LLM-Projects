@@ -6,7 +6,7 @@ from custom_functions import SoftmaxFunction
 
 
 class Softmax(nn.Module):
-    def __init__(self, dim: int = -1, temperature: int | float = 1.0):
+    def __init__(self, dim: int = -1, temperature: int | float = 1.0, custom:bool = True):
         super().__init__()
         dev_utils.type_check(
             ("dim", dim, int),
@@ -18,9 +18,12 @@ class Softmax(nn.Module):
 
         self._dim = dim
         self._temperature = temperature
+        self.custom = custom
 
     def forward(self, x: Tensor) -> Tensor:
-        return SoftmaxFunction.apply(torch.is_grad_enabled(), x, self.temperature, self.dim)
+        if self.custom:
+            return SoftmaxFunction.apply(torch.is_grad_enabled(), x, self.temperature, self.dim)
+        return nn.functional.softmax(x/self.temperature, dim=self.dim)
 
     @property
     def dim(self):

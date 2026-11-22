@@ -328,32 +328,16 @@ class Transformer(nn.Module):
             ("embedding", "transformer_block", "final_layer_norm"),
             func_name=func_name,
         )
-        if embed_dim is None:
-            if num_q_heads is not None:
-                embed_dim = num_q_heads * 64
-            else:
-                embed_dim = num_kv_heads * 64
-        if ffn_dim is None:
-            if ffn.lower() == "swiglu":
-                ffn_dim = int(embed_dim * 8 / 3)
-            else:
-                ffn_dim = embed_dim * 4
 
-        if custom:
-            self.embedding = Embedding(vocab_size, embed_dim, init_cfg=init_cfg.embedding)
-            self.final_layer_norm = LayerNorm(
-                embed_dim,
-                eps=norm_eps,
-                bias=norm_bias,
-                init_cfg=init_cfg.final_layer_norm,
-            )
-        else:
-            self.embedding = nn.Embedding(vocab_size, embed_dim)
-            self.final_layer_norm = nn.LayerNorm(
-                embed_dim,
-                eps=norm_eps,
-                bias=norm_bias,
-            )
+        self.embedding = Embedding(vocab_size, embed_dim, init_cfg=init_cfg.embedding, custom=custom,)
+        self.final_layer_norm = LayerNorm(
+            embed_dim,
+            eps=norm_eps,
+            bias=norm_bias,
+            init_cfg=init_cfg.final_layer_norm,
+            custom=custom,
+        )
+        self._matmul = matmul if custom else torch.matmul
         
         self.transformer_blocks = nn.ModuleList(
             [
@@ -384,7 +368,10 @@ class Transformer(nn.Module):
                 raise ValueError(
                     "<Transformer.__init__()> max_seq_len은 learnable positional embedding을 사용할 경우 필수입니다."
                 )
-            self._pos_embedding = Embedding(max_seq_len, embed_dim, init_cfg=init_cfg.pos_embedding)
+            if self.custom:
+                self._pos_embedding = Embedding(max_seq_len, embed_dim, init_cfg=init_cfg.pos_embedding)
+            else:
+                self._pos_embedding = nn.Embedding(max_seq_len, embed_dim)
         self._max_seq_len = max_seq_len
 
         self.cached_causal_mask: Tensor
@@ -446,7 +433,7 @@ class Transformer(nn.Module):
         if torch.is_inference_mode_enabled():
             self.kv_cache_idx += T_in
 
-        return matmul(x, self.embedding.weight.T)
+        return self._matmul(x, self.embedding.weight.T)
 
     def empty_kv_cache(self):
         self.k_cache.empty_cache()

@@ -14,6 +14,7 @@ class LayerNorm(nn.Module):
         eps: float = 1e-5,
         bias: bool = True,
         init_cfg: DictConfig | dict = None,
+        custom:bool = True
     ):
         """```
         init_cfg = {
@@ -64,6 +65,14 @@ class LayerNorm(nn.Module):
         self._gamma = nn_utils.init_parameter(*normalized_shape, init_cfg=init_cfg.gamma)
         if self.use_bias:
             self._beta = nn_utils.init_parameter(*normalized_shape, init_cfg=init_cfg.beta)
+        if not custom:
+            self._ln = nn.LayerNorm(normalized_shape, eps, bias=bias)
+            with torch.no_grad():
+                self._ln.weight.data = self._gamma
+                self._gamma = self._ln.weight
+                if self.use_bias:
+                    self._ln.bias.data = self._beta
+                    self._beta = self._ln.bias
 
     def forward_debug(self, x: Tensor):
         # x.shape == (B, T, D), self.normalized_shape == (D,)
@@ -84,9 +93,11 @@ class LayerNorm(nn.Module):
         if rt.DEBUG_CHECKS:
             self.forward_debug(x)
 
-        return LayerNormFunction.apply(
-            torch.is_grad_enabled(), x, self.gamma, self.beta, self.normalized_dims, self.eps
-        )
+        if self.custom:
+            return LayerNormFunction.apply(
+                torch.is_grad_enabled(), x, self.gamma, self.beta, self.normalized_dims, self.eps
+            )
+        return self._ln(x)
 
     @property
     def eps(self):
